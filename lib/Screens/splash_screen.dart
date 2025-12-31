@@ -21,7 +21,6 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  static const _logoPath = 'assets/ams_logo_underline.png';
   @override
 void initState() {
   super.initState();
@@ -97,13 +96,15 @@ void initState() {
       body: Stack(
         children: const [
           // watermark background
-          WatermarkTiledSmall(tileScale: 25.0),
+          WatermarkTiledSmall(tileScale: 6.0),
 
           // centered-ish logo
           Positioned(
-            top: 350,
-            left: 58,
-            child: _SplashLogo(),
+            top: 240,
+            right: 10,
+            left: 10,
+           // left: 58,
+            child: Center(child: _SplashLogo()),
           ),
         ],
       ),
@@ -114,16 +115,44 @@ void initState() {
 class _SplashLogo extends StatelessWidget {
   const _SplashLogo();
 
-  static const _logoPath = 'assets/ams_logo_underline.png';
-
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      _logoPath,
-      width: 320,
-      height: 160,
+    return ShaderMask(
+      shaderCallback: (bounds) {
+        return const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+           Color(0xFF0ED2F7), Color(0xFF7F53FD)
+          ],
+        ).createShader(bounds);
+      },
+      child:Image.asset(
+      'assets/basales.png',
+      width: 390,
+      height: 290,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
+    )
     );
   }
 }
+
+
+// class _SplashLogo extends StatelessWidget {
+//   const _SplashLogo();
+
+//   static const _logoPath = 'assets/basales.png';
+
+//   @override
+//   Widget build(BuildContext context) {
+    // return Image.asset(
+    
+    //   _logoPath,
+    //   width: 320,
+    //   height: 160,
+    //   fit: BoxFit.contain,
+    //   filterQuality: FilterQuality.high,
+    // );
+//   }
+// }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class WatermarkTiledSmall extends StatelessWidget {
-  const WatermarkTiledSmall({super.key, this.tileScale = 3.0});
+  const WatermarkTiledSmall({super.key, this.tileScale = 1.0});
   // Bigger value => smaller tile (3.0 draws the image at 1/3 size)
   final double tileScale;
 
@@ -10,9 +10,11 @@ class WatermarkTiledSmall extends StatelessWidget {
     return Positioned.fill(
       child: IgnorePointer(
         child: Container(
+          height: 100,
+          width: 100,
           decoration: BoxDecoration(
             image: DecorationImage(
-              image: const AssetImage('assets/ams_logo_underline.png'),
+              image: const AssetImage('assets/basales.png'),
               repeat: ImageRepeat.repeat, // tile infinitely
               fit: BoxFit.none, // no scaling by fit
               // Make watermark subtle & dark-ish
