@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
     print("SUPERVISOR $supervisorLoggedIn");
 
     return MaterialApp(
-      title: 'AMS-T',
+      title: 'BA Program',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
