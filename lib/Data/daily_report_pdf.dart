@@ -6,21 +6,6 @@ import 'order_storage.dart';
 import 'dart:typed_data';
 
 
-// lib/Data/daily_report_pdf.dart
-import 'dart:typed_data';
-
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-
-import 'order_storage.dart'; // adjust path if needed
-// lib/Data/daily_report_pdf.dart
-import 'dart:typed_data';
-
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-
-import 'order_storage.dart'; // adjust path if needed
-
 class DailyReportPdfService {
   Future<Uint8List> generateDailyReportPdf(DateTime day) async {
     final sheet = OrdersStorage().dailySheetFor(day);
