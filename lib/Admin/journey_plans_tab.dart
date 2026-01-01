@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 import '../Firebase/firebase_services.dart'
     show Fb, FbLocation, FbLocationRepo, FbSupervisorRepo, FbSupervisorProfile;
@@ -168,14 +169,90 @@ class _JourneyPlansManagementTabState extends State<JourneyPlansManagementTab> {
     });
   }
 
-  String _fullDate(DateTime dt) => _dayKey(dt);
-
+  //String _fullDate(DateTime dt) => _dayKey(dt);
+String _fullDate(DateTime dt) {
+  return DateFormat('dd-MMM-yyyy').format(dt);
+}
   // ================= LABEL HELPERS =================
 
   static const _wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   String _weekdayShort(DateTime d) => _wd[(d.weekday - 1).clamp(0, 6)];
 
-  // chip shows DayName + Day# + selectedCount
+  Widget _dayChip(DateTime date, bool active, VoidCallback onTap, double s, int dayNumber) {
+  final k = _dayKey(date);
+  final selectedCount = _dayToLocationIds[k]?.length ?? 0;
+
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      margin: EdgeInsets.only(right: 8 * s),
+      padding: EdgeInsets.symmetric(horizontal: 12 * s, vertical: 9 * s),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        gradient: active
+            ? const LinearGradient(colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)])
+            : null,
+        color: active ? null : const Color(0xFFEFF2F8),
+        border: Border.all(
+          color: selectedCount > 0 && !active
+              ? const Color(0xFF7F53FD).withOpacity(0.35)
+              : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${_weekdayShort(date)} • ${_fullDate(date)}', // ✅ complete date
+            style: TextStyle(
+              fontFamily: 'ClashGrotesk',
+              fontWeight: FontWeight.w900,
+              color: active ? Colors.white : const Color(0xFF111827),
+              fontSize: 13 * s,
+            ),
+          ),
+          // SizedBox(width: 8 * s),
+          // Container(
+          //   padding: EdgeInsets.symmetric(horizontal: 8 * s, vertical: 3 * s),
+          //   decoration: BoxDecoration(
+          //     color: active ? Colors.white.withOpacity(0.18) : Colors.white,
+          //     borderRadius: BorderRadius.circular(999),
+          //   ),
+          //   child: Text(
+          //     '$dayNumber',
+          //     style: TextStyle(
+          //       fontFamily: 'ClashGrotesk',
+          //       fontWeight: FontWeight.w900,
+          //       color: active ? Colors.white : const Color(0xFF7F53FD),
+          //       fontSize: 11 * s,
+          //     ),
+          //   ),
+          // ),
+          SizedBox(width: 8 * s),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8 * s, vertical: 3 * s),
+            decoration: BoxDecoration(
+              color: active ? Colors.white.withOpacity(0.18) : Colors.white,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              'Locations $selectedCount',
+              style: TextStyle(
+                fontFamily: 'ClashGrotesk',
+                fontWeight: FontWeight.w900,
+                color: active ? Colors.white : const Color(0xFF7F53FD),
+                fontSize: 11 * s,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+
+ /* // chip shows DayName + Day# + selectedCount
   Widget _dayChip(DateTime date, bool active, VoidCallback onTap, double s, int dayNumber) {
     final k = _dayKey(date);
     final selectedCount = _dayToLocationIds[k]?.length ?? 0;
@@ -245,7 +322,7 @@ class _JourneyPlansManagementTabState extends State<JourneyPlansManagementTab> {
         ),
       ),
     );
-  }
+  }*/
 
   // ================= COPY HELPERS =================
 
