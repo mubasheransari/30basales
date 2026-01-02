@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:new_amst_flutter/Model/fb_journey_plan.dart';
+import 'package:new_amst_flutter/Model/fb_journey_stop.dart';
 
 /// Central place for Firebase instances used across the app.
 class Fb {
@@ -498,55 +500,55 @@ class FbSupervisorRepo {
 /*                             Journey Plan Models                            */
 /* -------------------------------------------------------------------------- */
 
-class FbJourneyStop {
-  final String id;
-  final String locationId;
-  final String name;
-  final double lat;
-  final double lng;
-  final double radiusMeters;
+// class FbJourneyStop {
+//   final String id;
+//   final String locationId;
+//   final String name;
+//   final double lat;
+//   final double lng;
+//   final double radiusMeters;
 
-  bool isVisited;
-  DateTime? checkIn;
-  DateTime? checkOut;
-  int? durationMinutes;
+//   bool isVisited;
+//   DateTime? checkIn;
+//   DateTime? checkOut;
+//   int? durationMinutes;
 
-  FbJourneyStop({
-    required this.id,
-    required this.locationId,
-    required this.name,
-    required this.lat,
-    required this.lng,
-    required this.radiusMeters,
-    this.isVisited = false,
-    this.checkIn,
-    this.checkOut,
-    this.durationMinutes,
-  });
+//   FbJourneyStop({
+//     required this.id,
+//     required this.locationId,
+//     required this.name,
+//     required this.lat,
+//     required this.lng,
+//     required this.radiusMeters,
+//     this.isVisited = false,
+//     this.checkIn,
+//     this.checkOut,
+//     this.durationMinutes,
+//   });
 
-  static FbJourneyStop fromDoc(String id, Map<String, dynamic> d) {
-    final gp = d['allowedLocation'];
-    double lat = 0;
-    double lng = 0;
-    if (gp is GeoPoint) {
-      lat = gp.latitude;
-      lng = gp.longitude;
-    } else if (gp is Map) {
-      lat = (gp['lat'] as num?)?.toDouble() ?? 0;
-      lng = (gp['lng'] as num?)?.toDouble() ?? 0;
-    }
+//   static FbJourneyStop fromDoc(String id, Map<String, dynamic> d) {
+//     final gp = d['allowedLocation'];
+//     double lat = 0;
+//     double lng = 0;
+//     if (gp is GeoPoint) {
+//       lat = gp.latitude;
+//       lng = gp.longitude;
+//     } else if (gp is Map) {
+//       lat = (gp['lat'] as num?)?.toDouble() ?? 0;
+//       lng = (gp['lng'] as num?)?.toDouble() ?? 0;
+//     }
 
-    return FbJourneyStop(
-      id: id,
-      locationId: (d['locationId'] ?? '').toString(),
-      name: (d['name'] ?? '').toString(),
-      lat: lat,
-      lng: lng,
-      radiusMeters: (d['allowedRadiusMeters'] as num?)?.toDouble() ?? 100,
-    );
-  }
-}
-
+//     return FbJourneyStop(
+//       id: id,
+//       locationId: (d['locationId'] ?? '').toString(),
+//       name: (d['name'] ?? '').toString(),
+//       lat: lat,
+//       lng: lng,
+//       radiusMeters: (d['allowedRadiusMeters'] as num?)?.toDouble() ?? 100,
+//     );
+//   }
+// }
+/*
 class FbJourneyPlan {
   final String id;
   final String supervisorId;
@@ -579,7 +581,7 @@ class FbJourneyPlan {
     );
   }
 }
-
+*/
 /// Journey plans are created by Admin for each supervisor.
 ///
 /// Firestore structure:

@@ -1,31 +1,30 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:new_amst_flutter/Model/fb_journey_plan.dart';
 
+import '../Model/fb_journey_stop.dart';
 import 'firebase_services.dart';
 
-/// Journey Plans repository.
-///
-/// Firestore model:
-/// - journeyPlans/{planId}
-///     supervisorId, periodType("weekly"|"monthly"), startDate(Timestamp), endDate(Timestamp),
-///     createdAt, createdBy
-/// - journeyPlans/{planId}/stops/{stopId}
-///     locationId, name, allowedLocation(GeoPoint), allowedRadiusMeters, sortIndex
-/// - journeyPlans/{planId}/visits/{visitId}
-///     locationId, stopName, comment, checkIn, checkOut, dayKey, createdAt
-///
-/// â IMPORTANT:
-/// Do NOT re-define models (FbLocation/FbJourneyPlan/FbJourneyStop) here.
-/// They already live in `firebase_services.dart`.
-/// Keeping a single source of truth prevents type-mismatch errors.
+
+
+
+
 class FbJourneyPlanRepo {
   static CollectionReference<Map<String, dynamic>> get _plans =>
       Fb.db.collection('journeyPlans');
 
-  // ------------------------------ Admin ------------------------------
+  static String dayKey(DateTime dt) {
+    final y = dt.year.toString();
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
 
   static Future<void> createJourneyPlan({
     required String supervisorId,
-    required String periodType, // "weekly" | "monthly"
+    required String periodType,
     required DateTime startDate,
     required DateTime endDate,
     required List<FbLocation> stops,
@@ -38,8 +37,8 @@ class FbJourneyPlanRepo {
     batch.set(doc, {
       'supervisorId': supervisorId,
       'periodType': periodType,
-      'startDate': Timestamp.fromDate(startDate),
-      'endDate': Timestamp.fromDate(endDate),
+      'startDate': Timestamp.fromDate(_dateOnly(startDate)),
+      'endDate': Timestamp.fromDate(_dateOnly(endDate)),
       'createdAt': FieldValue.serverTimestamp(),
       'createdBy': Fb.uid,
     });
@@ -47,7 +46,7 @@ class FbJourneyPlanRepo {
     final stopsCol = doc.collection('stops');
     int i = 0;
     for (final s in stops) {
-      final stopId = s.id; // keep same id as locationId for easy matching
+      final stopId = s.id;
       final stopDoc = stopsCol.doc(stopId);
       batch.set(stopDoc, {
         'locationId': s.id,
@@ -63,17 +62,22 @@ class FbJourneyPlanRepo {
   }
 
   static Future<void> deletePlan(String planId) async {
-    // NOTE: For large subcollections you should use a Cloud Function.
-    // Here we only delete stops + visits in small amounts.
     final ref = _plans.doc(planId);
-
     final batch = Fb.db.batch();
 
+    // delete legacy stops
     final stops = await ref.collection('stops').get();
     for (final d in stops.docs) {
       batch.delete(d.reference);
     }
 
+    // delete new days docs (if exist)
+    final days = await ref.collection('days').get();
+    for (final d in days.docs) {
+      batch.delete(d.reference);
+    }
+
+    // delete visits
     final visits = await ref.collection('visits').get();
     for (final d in visits.docs) {
       batch.delete(d.reference);
@@ -83,21 +87,24 @@ class FbJourneyPlanRepo {
     await batch.commit();
   }
 
-  // ---------------------------- Supervisor ----------------------------
+  // ============================= Supervisor =============================
 
-  /// Fetch the active plan for a supervisor where `now` is within start/end dates.
+  /// Fetch active plan where `now` is within start/end.
   static Future<FbJourneyPlan?> fetchActivePlanOnce({
     required String supervisorId,
     required DateTime now,
   }) async {
-    // ✅ No composite-index needed:
-    // Only filter by supervisorId (single-field index), then do date-range + sorting in-memory.
     final q = await _plans.where('supervisorId', isEqualTo: supervisorId).get();
 
     FbJourneyPlan? best;
+    final n = _dateOnly(now);
+
     for (final d in q.docs) {
       final plan = FbJourneyPlan.fromDoc(d.id, d.data());
-      final inRange = !now.isBefore(plan.startDate) && !now.isAfter(plan.endDate);
+      final s = _dateOnly(plan.startDate);
+      final e = _dateOnly(plan.endDate);
+
+      final inRange = !n.isBefore(s) && !n.isAfter(e);
       if (!inRange) continue;
 
       if (best == null || plan.startDate.isAfter(best.startDate)) {
@@ -107,16 +114,47 @@ class FbJourneyPlanRepo {
     return best;
   }
 
-  static Future<List<FbJourneyStop>> fetchStopsOnce({
-    required String planId,
-  }) async {
-    final snap = await _plans
-        .doc(planId)
-        .collection('stops')
-        .orderBy('sortIndex')
-        .get();
 
-    return snap.docs.map((d) => FbJourneyStop.fromDoc(d.id, d.data())).toList();
+  static Future<List<FbJourneyStop>> fetchStopsForDay({
+    required String planId,
+    required String dayKey, // yyyy-mm-dd
+  }) async {
+    final planRef = _plans.doc(planId);
+
+    final planSnap = await planRef.get();
+    final planData = planSnap.data() ?? <String, dynamic>{};
+
+    final snapshotAny = planData['locationsSnapshot'];
+    final Map<String, dynamic> snapshotMap =
+        (snapshotAny is Map<String, dynamic>) ? snapshotAny : <String, dynamic>{};
+
+    final daySnap = await planRef.collection('days').doc(dayKey).get();
+    final dayData = daySnap.data() ?? <String, dynamic>{};
+
+    final idsAny = dayData['locationIds'];
+    final locationIds = (idsAny is List)
+        ? idsAny.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+        : <String>[];
+
+    final out = <FbJourneyStop>[];
+    for (final id in locationIds) {
+      final itemAny = snapshotMap[id];
+      if (itemAny is Map) {
+        out.add(
+          FbJourneyStop.fromSnapshot(
+            id,
+            Map<String, dynamic>.from(itemAny),
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  /// Legacy fallback: read /stops (only if you still have old plans)
+  static Future<List<FbJourneyStop>> fetchStopsOnce({required String planId}) async {
+    final snap = await _plans.doc(planId).collection('stops').orderBy('sortIndex').get();
+    return snap.docs.map((d) => FbJourneyStop.fromStopsDoc(d.id, d.data())).toList();
   }
 
   /// Read visited location ids for a specific day.
@@ -147,25 +185,20 @@ class FbJourneyPlanRepo {
     String? dayKey,
   }) async {
     if (Fb.uid == null) throw Exception('Not signed in');
+
     final ref = _plans.doc(planId).collection('visits').doc();
     final now = DateTime.now();
 
-    String _mkDayKey(DateTime dt) {
-      final y = dt.year.toString();
-      final m = dt.month.toString().padLeft(2, '0');
-      final d = dt.day.toString().padLeft(2, '0');
-      return '$y-$m-$d';
-    }
+    String mkDayKey(DateTime dt) => FbJourneyPlanRepo.dayKey(dt);
 
     await ref.set({
-      // â used by Firestore rules to ensure only the assigned supervisor writes visits
       'supervisorId': Fb.uid,
       'locationId': stop.locationId,
       'stopName': stop.name,
       'comment': comment,
       'checkIn': checkIn == null ? null : Timestamp.fromDate(checkIn),
       'checkOut': checkOut == null ? null : Timestamp.fromDate(checkOut),
-      'dayKey': dayKey ?? _mkDayKey(now),
+      'dayKey': dayKey ?? mkDayKey(now),
       'createdAt': FieldValue.serverTimestamp(),
       'createdBy': Fb.uid,
     });

@@ -12,9 +12,9 @@ import 'package:bloc/bloc.dart';
 var storage = GetStorage();
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final Repository repo;
 
-  AuthBloc(this.repo) : super(const AuthState()) {
+
+  AuthBloc() : super(const AuthState()) {
     on<LoginEvent>(_onLogin);
 
     // 🔥 map load handlers
