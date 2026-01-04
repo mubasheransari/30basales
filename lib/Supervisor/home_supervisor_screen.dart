@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -11,6 +12,7 @@ import 'package:new_amst_flutter/Model/super_journeyplan_model.dart';
 import 'package:new_amst_flutter/Screens/auth_screen.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math' as math;
 
 const kText = Color(0xFF1E1E1E);
 const kMuted = Color(0xFF707883);
@@ -22,7 +24,9 @@ const _kGrad = LinearGradient(
   end: Alignment.bottomRight,
 );
 
-const double kVisitRadiusMeters = 13000;
+// ✅ HARD LOCK: supervisor must be within 50 meters to submit a visit.
+// If a stop has a smaller radius configured, we respect the smaller radius.
+const double kVisitRadiusMeters = 50.0;
 
 const String _pendingVisitKey = 'pending_visit_v1';
 const String _pendingVisitCheckInKey = 'pending_visit_checkin_v1';
@@ -380,17 +384,20 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
       return;
     }
 
-    final dKm = distanceInKm(
+    // ✅ Use meters for precise geo-fence enforcement.
+    final dMeters = Geolocator.distanceBetween(
       _currentPos!.latitude,
       _currentPos!.longitude,
       item.supervisor.lat,
       item.supervisor.lng,
     );
-    final dMeters = dKm * 1000;
 
-    final limitMeters = (item.supervisor.radiusMeters > 0)
-        ? item.supervisor.radiusMeters
+    // ✅ Hard lock to 50m.
+    // If a stop is configured with a smaller radius, enforce the smaller one.
+    final configured = (item.supervisor.radiusMeters > 0)
+        ? item.supervisor.radiusMeters.toDouble()
         : kVisitRadiusMeters;
+    final limitMeters = math.min(configured, kVisitRadiusMeters);
 
     if (dMeters > limitMeters) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -439,6 +446,12 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
       builder: (ctx) {
         XFile? pickedImage;
         final commentCtrl = TextEditingController();
+        final stockQtyCtrl = TextEditingController();
+
+        // simple supervisor visit form fields
+        String outletCondition = 'Good'; // Good / Normal / Bad
+        bool stockAvailable = true;
+        bool displayOk = true;
         bool submitting = false;
 
         return WillPopScope(
@@ -454,8 +467,14 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
                 if (img != null) setState(() => pickedImage = img);
               }
 
+              final qty = int.tryParse(stockQtyCtrl.text.trim());
+
               final canSubmit =
-                  pickedImage != null && commentCtrl.text.trim().isNotEmpty && !submitting;
+                  pickedImage != null &&
+                  commentCtrl.text.trim().isNotEmpty &&
+                  qty != null &&
+                  qty >= 0 &&
+                  !submitting;
 
               return AlertDialog(
                 backgroundColor: Colors.white.withOpacity(0.59),
@@ -541,6 +560,103 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+
+                      // ✅ Supervisor visit form fields
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Outlet condition',
+                          style: const TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: kText,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF2F3F5),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: outletCondition,
+                            isExpanded: true,
+                            onChanged: (v) => setState(() => outletCondition = v ?? 'Good'),
+                            items: const [
+                              DropdownMenuItem(value: 'Good', child: Text('Good')),
+                              DropdownMenuItem(value: 'Normal', child: Text('Normal')),
+                              DropdownMenuItem(value: 'Bad', child: Text('Bad')),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _pillToggle(
+                              label: 'Stock available',
+                              value: stockAvailable,
+                              onChanged: (v) => setState(() => stockAvailable = v),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _pillToggle(
+                              label: 'Display OK',
+                              value: displayOk,
+                              onChanged: (v) => setState(() => displayOk = v),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Stock quantity (approx.)',
+                          style: const TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: kText,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: stockQtyCtrl,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. 12',
+                          hintStyle: const TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontSize: 12,
+                            color: kMuted,
+                          ),
+                          fillColor: const Color(0xFFF2F3F5),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontFamily: 'ClashGrotesk',
+                          fontSize: 13,
+                          color: kText,
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -600,6 +716,10 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
                               Navigator.of(ctx).pop(<String, dynamic>{
                                 'imagePath': pickedImage!.path,
                                 'comment': commentCtrl.text.trim(),
+                                'outletCondition': outletCondition,
+                                'stockAvailable': stockAvailable,
+                                'displayOk': displayOk,
+                                'stockQty': int.tryParse(stockQtyCtrl.text.trim()) ?? 0,
                               });
                             }
                           : null,
@@ -640,9 +760,33 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
       _box.remove(_pendingVisitKey);
       _box.remove(_pendingVisitCheckInKey);
 
+      final form = <String, dynamic>{
+        'outletCondition': (result['outletCondition'] ?? '').toString(),
+        'stockAvailable': result['stockAvailable'] == true,
+        'displayOk': result['displayOk'] == true,
+        'stockQty': (result['stockQty'] is num) ? (result['stockQty'] as num).toInt() : 0,
+      };
+
+      // Optional: encode photo to base64 (best-effort, size-guarded)
+      String? photoBase64;
+      final imgPath = (result['imagePath'] ?? '').toString();
+      if (imgPath.isNotEmpty) {
+        try {
+          final bytes = await File(imgPath).readAsBytes();
+          // Firestore doc limit is ~1MB. Keep a safe ceiling.
+          if (bytes.length <= 300 * 1024) {
+            photoBase64 = base64Encode(bytes);
+          }
+        } catch (_) {
+          // ignore (still allow visit submission)
+        }
+      }
+
       _markVisitedPersist(
         stop,
         comment: (result['comment'] ?? '').toString(),
+        form: form,
+        photoBase64: photoBase64,
         checkIn: checkIn,
         checkOut: checkOut,
         durationMinutes: durationMinutes,
@@ -650,9 +794,46 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
     }
   }
 
+  Widget _pillToggle({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F3F5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'ClashGrotesk',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: kText,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _markVisitedPersist(
     JourneyPlanSupervisor stop, {
     required String comment,
+    required Map<String, dynamic> form,
+    String? photoBase64,
     DateTime? checkIn,
     DateTime? checkOut,
     int? durationMinutes,
@@ -681,6 +862,7 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
       'checkOut': checkOut?.toIso8601String(),
       'durationMinutes': durationMinutes,
       'comment': comment,
+      'form': form,
     };
     _box.write(detailsKey, details);
 
@@ -699,6 +881,8 @@ class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
           radiusMeters: stop.radiusMeters,
         ),
         comment: comment,
+        form: form,
+        photoBase64: photoBase64,
         checkIn: checkIn,
         checkOut: checkOut,
       );

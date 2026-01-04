@@ -21,7 +21,7 @@ android {
         applicationId = "com.example.voice_assistance_web_app"
 
         // ✅ firebase-auth 23.x requires minSdk >= 23
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
 
         targetSdk = 36
         versionCode = 1

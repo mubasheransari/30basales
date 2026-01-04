@@ -182,6 +182,8 @@ class FbJourneyPlanRepo {
     required String comment,
     required DateTime? checkIn,
     required DateTime? checkOut,
+    Map<String, dynamic>? form,
+    String? photoBase64,
     String? dayKey,
   }) async {
     if (Fb.uid == null) throw Exception('Not signed in');
@@ -198,6 +200,8 @@ class FbJourneyPlanRepo {
       'comment': comment,
       'checkIn': checkIn == null ? null : Timestamp.fromDate(checkIn),
       'checkOut': checkOut == null ? null : Timestamp.fromDate(checkOut),
+      if (form != null) 'form': form,
+      if (photoBase64 != null) 'photoBase64': photoBase64,
       'dayKey': dayKey ?? mkDayKey(now),
       'createdAt': FieldValue.serverTimestamp(),
       'createdBy': Fb.uid,

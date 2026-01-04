@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -621,6 +623,231 @@ class _JourneyPlansManagementTabState extends State<JourneyPlansManagementTab> {
                 ),
 
                 SizedBox(height: 10 * s),
+                const Divider(),
+                SizedBox(height: 10 * s),
+
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Supervisor activity (visits)',
+                    style: TextStyle(
+                      fontFamily: 'ClashGrotesk',
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14 * s,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 10 * s),
+
+                // ✅ Live visits stream (shows form data entered by supervisor)
+                Flexible(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: Fb.db
+                        .collection('journeyPlans')
+                        .doc(planId)
+                        .collection('visits')
+                        // ✅ NO-INDEX query: only orderBy, filter in app (avoids composite index requirement)
+                        .orderBy('createdAt', descending: true)
+                        .limit(200)
+                        .snapshots(),
+                    builder: (ctx, snap) {
+                      if (snap.hasError) {
+                        return Container(
+                          padding: EdgeInsets.all(12 * s),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Failed to load visits: ${snap.error}',
+                            style: TextStyle(
+                              fontFamily: 'ClashGrotesk',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5 * s,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (!snap.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final allDocs = snap.data!.docs;
+
+                      // ✅ NO-INDEX filtering (Firestore index not required)
+                      final docs = allDocs.where((d) {
+                        final m = d.data();
+                        return (m['supervisorId'] ?? '').toString() == supId;
+                      }).toList(growable: false);
+                      if (docs.isEmpty) {
+                        return Container(
+                          padding: EdgeInsets.all(12 * s),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF6F7FA),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'No visits submitted yet.',
+                            style: TextStyle(
+                              fontFamily: 'ClashGrotesk',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5 * s,
+                              color: const Color(0xFF6B7280),
+                            ),
+                          ),
+                        );
+                      }
+
+                      String _fmtTs(Timestamp? t) {
+                        if (t == null) return '--';
+                        final dt = t.toDate();
+                        return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+                      }
+
+                      int _durationMin(Timestamp? a, Timestamp? b) {
+                        if (a == null || b == null) return 0;
+                        return b.toDate().difference(a.toDate()).inMinutes;
+                      }
+
+                      Uint8List? _tryDecodeBase64(String? s) {
+                        if (s == null || s.trim().isEmpty) return null;
+                        try {
+                          return base64Decode(s);
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      return ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: docs.length,
+                        separatorBuilder: (_, __) => SizedBox(height: 8 * s),
+                        itemBuilder: (_, i) {
+                          final d = docs[i].data();
+
+                          final stopName = (d['stopName'] ?? '--').toString();
+                          final dayKey = (d['dayKey'] ?? '--').toString();
+                          final comment = (d['comment'] ?? '').toString();
+                          final checkIn = d['checkIn'] as Timestamp?;
+                          final checkOut = d['checkOut'] as Timestamp?;
+                          final duration = _durationMin(checkIn, checkOut);
+
+                          final formAny = d['form'];
+                          final form = (formAny is Map)
+                              ? Map<String, dynamic>.from(formAny)
+                              : <String, dynamic>{};
+
+                          final outletCondition = (form['outletCondition'] ?? '').toString();
+                          final stockAvailable = form['stockAvailable'];
+                          final displayOk = form['displayOk'];
+                          final stockQty = (form['stockQty'] ?? '').toString();
+
+                          final imgBytes = _tryDecodeBase64(d['photoBase64']?.toString());
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF6F7FA),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                            ),
+                            child: Theme(
+                              data: Theme.of(ctx).copyWith(dividerColor: Colors.transparent),
+                              child: ExpansionTile(
+                                tilePadding: EdgeInsets.symmetric(horizontal: 12 * s, vertical: 2 * s),
+                                childrenPadding: EdgeInsets.fromLTRB(12 * s, 0, 12 * s, 12 * s),
+                                title: Text(
+                                  stopName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'ClashGrotesk',
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13.5 * s,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Day: $dayKey • In: ${_fmtTs(checkIn)} • Out: ${_fmtTs(checkOut)}${duration > 0 ? ' • $duration min' : ''}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'ClashGrotesk',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11.5 * s,
+                                    color: const Color(0xFF6B7280),
+                                  ),
+                                ),
+                                children: [
+                                  if (imgBytes != null) ...[
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.memory(
+                                        imgBytes,
+                                        height: 160 * s,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    SizedBox(height: 10 * s),
+                                  ],
+
+                                  // form chips
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      if (outletCondition.isNotEmpty)
+                                        _visitChip('Condition: $outletCondition'),
+                                      if (stockQty.isNotEmpty)
+                                        _visitChip('Stock Qty: $stockQty'),
+                                      if (stockAvailable is bool)
+                                        _visitChip(stockAvailable ? 'Stock: Yes' : 'Stock: No'),
+                                      if (displayOk is bool)
+                                        _visitChip(displayOk ? 'Display: OK' : 'Display: Not OK'),
+                                    ],
+                                  ),
+                                  if (comment.trim().isNotEmpty) ...[
+                                    SizedBox(height: 10 * s),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        'Comment',
+                                        style: TextStyle(
+                                          fontFamily: 'ClashGrotesk',
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 12.5 * s,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(height: 6 * s),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        comment,
+                                        style: TextStyle(
+                                          fontFamily: 'ClashGrotesk',
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12.5 * s,
+                                          color: const Color(0xFF374151),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+                SizedBox(height: 10 * s),
                 SizedBox(
                   width: double.infinity,
                   height: 46 * s,
@@ -680,6 +907,26 @@ class _JourneyPlansManagementTabState extends State<JourneyPlansManagementTab> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _visitChip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'ClashGrotesk',
+          fontWeight: FontWeight.w800,
+          fontSize: 11.5,
+          color: Color(0xFF111827),
+        ),
       ),
     );
   }
