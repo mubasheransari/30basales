@@ -785,12 +785,12 @@ Future<void> _submitLogin() async {
           // logo (unchanged)
           Positioned(
             top: logoTop,
-            left: 60,
+            left: 10,
             right: 0,
             child: IgnorePointer(
               child: Center(
                 child: Image.asset(
-                  "assets/logo_ams.png",
+                  "assets/basales.png",
                   height: 270,
                   width: 270,
                 ),
