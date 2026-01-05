@@ -2711,47 +2711,6 @@ Future<void> _showVisitPopup(JourneyPlanSupervisor stop) async {
   );
 }
 
-/*
-  Future<void> _showJourneyEndedDialog() async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return WillPopScope(
-          onWillPop: () async => false,
-          child: AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text(
-              "Today's journey ended",
-              style: TextStyle(
-                fontFamily: 'ClashGrotesk',
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            content: const Text(
-              'You have visited all outlets planned for today.\n\n'
-              'Please come back tomorrow to start a new journey.',
-              style: TextStyle(fontFamily: 'ClashGrotesk', fontSize: 13),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text(
-                  'OK',
-                  style: TextStyle(
-                    fontFamily: 'ClashGrotesk',
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }*/
-
   Future<void> _logout() async {
     await _box.erase();
     await FirebaseAuth.instance.signOut();
