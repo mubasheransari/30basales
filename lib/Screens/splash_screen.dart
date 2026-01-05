@@ -8,7 +8,7 @@ import 'package:new_amst_flutter/Screens/app_shell.dart';
 import 'package:new_amst_flutter/Admin/admin_dashboard_screen.dart';
 import 'package:new_amst_flutter/Firebase/firebase_services.dart';
 import 'package:new_amst_flutter/Widgets/watermarked_widget.dart';
-import 'package:new_amst_flutter/Supervisor/home_supervisor_screen.dart';
+import 'package:new_amst_flutter/Supervisor/home_supervisor_screen.dart' hide AuthScreen;
 import 'package:new_amst_flutter/Screens/location_select_screen.dart';
 
 

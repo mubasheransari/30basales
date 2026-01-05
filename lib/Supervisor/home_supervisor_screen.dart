@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get_storage/get_storage.dart';
@@ -1396,7 +1397,7 @@ import 'dart:math' as math;
 
 
 
-
+/*
 
 const kText = Color(0xFF1E1E1E);
 const kMuted = Color(0xFF707883);
@@ -3252,3 +3253,1486 @@ class _GlassJourneyCard extends StatelessWidget {
     );
   }
 }
+*/
+
+
+
+
+
+
+
+const kText = Color(0xFF1E1E1E);
+const kMuted = Color(0xFF707883);
+const kShadow = Color(0x14000000);
+
+const _kGrad = LinearGradient(
+  colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+
+const double kVisitRadiusMeters = 50.0;
+const String _pendingVisitKey = 'pending_visit_v1';
+const String _pendingVisitCheckInKey = 'pending_visit_checkin_v1';
+const String _journeyDateKey = 'journey_date_v1';
+
+String _dateKey(DateTime dt) {
+  final y = dt.year.toString();
+  final m = dt.month.toString().padLeft(2, '0');
+  final d = dt.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
+}
+
+String _dayKey(DateTime dt) => _dateKey(dt);
+
+String formatTimeHM(DateTime dt) {
+  final hh = dt.hour.toString().padLeft(2, '0');
+  final mm = dt.minute.toString().padLeft(2, '0');
+  return '$hh:$mm';
+}
+
+double distanceInKm(double lat1, double lon1, double lat2, double lon2) {
+  final d = Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
+  return d / 1000.0;
+}
+
+
+class JourneyPlanSupervisor {
+  String name;
+  double lat;
+  double lng;
+  String? locationId;
+  num radiusMeters;
+  bool isVisited;
+
+  DateTime? checkIn;
+  DateTime? checkOut;
+  int? durationMinutes;
+
+  JourneyPlanSupervisor({
+    required this.name,
+    required this.lat,
+    required this.lng,
+    required this.locationId,
+    required this.radiusMeters,
+    required this.isVisited,
+    required this.checkIn,
+    required this.checkOut,
+    required this.durationMinutes,
+  });
+}
+
+class _JourneyWithDistance {
+  final JourneyPlanSupervisor supervisor;
+  final double distanceKm;
+  _JourneyWithDistance({required this.supervisor, required this.distanceKm});
+}
+
+// -------------------- SCREEN --------------------
+class JourneyPlanMapScreen extends StatefulWidget {
+  const JourneyPlanMapScreen({super.key});
+
+  @override
+  State<JourneyPlanMapScreen> createState() => _JourneyPlanMapScreenState();
+}
+
+class _JourneyPlanMapScreenState extends State<JourneyPlanMapScreen> {
+  Position? _currentPos;
+  String? _error;
+
+  /// ✅ Loading flags (ONLY show splash until all true)
+  bool _loading = true;
+  bool _planLoaded = false;
+  bool _mapCreated = false;
+  bool _locationReady = false;
+
+  late List<JourneyPlanSupervisor> _all;
+  String? _planId;
+
+  List<_JourneyWithDistance> _items = [];
+  GoogleMapController? _mapController;
+  final Set<Marker> _markers = {};
+
+  final GetStorage _box = GetStorage();
+  late String _todayKey; // yyyy-MM-dd for local-day change handling
+
+  // ✅ Firebase dayKey (same format)
+  String get _todayDayKey => _dayKey(DateTime.now());
+
+  int get _totalLocations => _all.length;
+  int get _completedLocations => _all.where((x) => x.isVisited == true).length;
+
+  bool get _ready =>
+      !_loading && _error == null && _locationReady && _planLoaded && _mapCreated;
+
+  @override
+  void initState() {
+    super.initState();
+    _all = <JourneyPlanSupervisor>[];
+    _todayKey = _dateKey(DateTime.now());
+    _resetLocalIfNewDay(); // ✅ only clears local pending popup on day change
+    _boot();
+  }
+
+  // -------------------- IMPORTANT CHANGE --------------------
+  // ✅ VISITED/PENDING is now derived from FIREBASE (per dayKey + locationId + supervisorId).
+  // Local storage is ONLY used to restore the "pending popup" if app closes mid-visit.
+
+  Future<void> _boot() async {
+    setState(() {
+      _error = null;
+      _loading = true;
+      _planLoaded = false;
+      _locationReady = false;
+      _mapCreated = false;
+    });
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() {
+        _error = 'Not signed in. Please login again.';
+        _loading = false;
+      });
+      return;
+    }
+
+    await _initLocation();
+    await _loadTodayPlan(uid: user.uid);
+
+    // restore pending popup (local)
+    await _restorePendingPopup();
+
+    // ✅ show ended if everything visited (based on firebase status)
+    _maybeShowJourneyEnded();
+
+    if (mounted) {
+      setState(() => _loading = false);
+    }
+  }
+
+  // ✅ clears only local day state (NOT visited)
+  void _resetLocalIfNewDay() {
+    final lastDate = _box.read<String>(_journeyDateKey);
+    if (lastDate != _todayKey) {
+      _box.write(_journeyDateKey, _todayKey);
+      _box.remove(_pendingVisitKey);
+      _box.remove(_pendingVisitCheckInKey);
+    }
+  }
+
+  // -------------------- LOAD PLAN + SYNC VISITS FROM FIREBASE --------------------
+  Future<void> _loadTodayPlan({required String uid}) async {
+    try {
+      // NOTE: using your existing repo calls
+      final plan = await jrepo.FbJourneyPlanRepo.fetchActivePlanOnce(
+        supervisorId: uid,
+        now: DateTime.now(),
+      );
+
+      if (plan == null) {
+        setState(() => _error = 'No journey plan assigned for today.');
+        return;
+      }
+
+      _planId = plan.id;
+
+      final stops = await jrepo.FbJourneyPlanRepo.fetchStopsForDay(
+        planId: plan.id,
+        dayKey: _todayDayKey,
+      );
+
+      _all = stops
+          .map(
+            (s) => JourneyPlanSupervisor(
+              name: s.name,
+              lat: s.lat,
+              lng: s.lng,
+              locationId: s.locationId,
+              radiusMeters: s.radiusMeters,
+              isVisited: false, // ✅ we'll set based on firebase visits
+              checkIn: null,
+              checkOut: null,
+              durationMinutes: null,
+            ),
+          )
+          .toList(growable: true);
+
+      if (!mounted) return;
+
+      _planLoaded = true;
+
+      // ✅ pull visits for today and mark each stop visited/pending
+      await _syncVisitsFromFirebaseForToday(supervisorId: uid);
+
+      // compute distances & markers
+      if (_currentPos != null) {
+        _computeDistancesAndMarkers();
+      }
+    } on FirebaseException catch (e) {
+      setState(() => _error = 'Firestore error: ${e.code} (${e.message ?? ''})');
+    } catch (e) {
+      setState(() => _error = 'Failed to load journey plan: $e');
+    }
+  }
+
+  // ✅ Deterministic docId => ONE VISIT PER LOCATION PER DAY PER SUPERVISOR
+  // String _visitDocId({
+  //   required String dayKey,
+  //   required String supervisorId,
+  //   required String locationId,
+  // }) {
+  //   // safe id (no slashes)
+  //   return '${dayKey}_$supervisorId_$locationId';
+  // }
+
+  String _visitDocId({
+  required String dayKey,
+  required String supervisorId,
+  required String locationId,
+}) {
+  // ✅ safe id (no slashes)
+  return '${dayKey}_${supervisorId}_${locationId}';
+}
+
+
+  // ✅ Fetch visits for today and apply to stops list
+  Future<void> _syncVisitsFromFirebaseForToday({required String supervisorId}) async {
+    final planId = _planId;
+    if (planId == null) return;
+
+    final dayKey = _todayDayKey;
+
+    try {
+      // Preferred query (you may need a composite index)
+      final qs = await FirebaseFirestore.instance
+          .collection('journeyPlans')
+          .doc(planId)
+          .collection('visits')
+          .where('supervisorId', isEqualTo: supervisorId)
+          .where('dayKey', isEqualTo: dayKey)
+          .get();
+
+      _applyVisitsSnapshotToStops(qs);
+    } on FirebaseException catch (_) {
+      // Fallback (no index) => load recent and filter
+      final qs = await FirebaseFirestore.instance
+          .collection('journeyPlans')
+          .doc(planId)
+          .collection('visits')
+          .orderBy('createdAt', descending: true)
+          .limit(300)
+          .get();
+
+      final filtered = qs.docs.where((d) {
+        final m = d.data();
+        return (m['supervisorId'] ?? '').toString() == supervisorId &&
+            (m['dayKey'] ?? '').toString() == dayKey;
+      }).toList();
+
+      _applyVisitsDocsToStops(filtered);
+    }
+  }
+
+  void _applyVisitsSnapshotToStops(QuerySnapshot<Map<String, dynamic>> qs) {
+    _applyVisitsDocsToStops(qs.docs);
+  }
+
+  void _applyVisitsDocsToStops(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    // map by locationId (best) else by stopName fallback
+    final byLocId = <String, Map<String, dynamic>>{};
+    final byName = <String, Map<String, dynamic>>{};
+
+    for (final d in docs) {
+      final m = d.data();
+      final locId = (m['locationId'] ?? '').toString();
+      final stopName = (m['stopName'] ?? '').toString();
+      if (locId.isNotEmpty) byLocId[locId] = m;
+      if (stopName.isNotEmpty) byName[stopName] = m;
+    }
+
+    for (final s in _all) {
+      final locId = (s.locationId ?? '').toString();
+      Map<String, dynamic>? m =
+          locId.isNotEmpty ? byLocId[locId] : null;
+      m ??= byName[s.name];
+
+      if (m == null) {
+        s.isVisited = false;
+        s.checkIn = null;
+        s.checkOut = null;
+        s.durationMinutes = null;
+        continue;
+      }
+
+      s.isVisited = true;
+
+      final checkInTs = m['checkIn'];
+      final checkOutTs = m['checkOut'];
+
+      DateTime? inDt;
+      DateTime? outDt;
+
+      if (checkInTs is Timestamp) inDt = checkInTs.toDate();
+      if (checkOutTs is Timestamp) outDt = checkOutTs.toDate();
+
+      s.checkIn = inDt;
+      s.checkOut = outDt;
+
+      if (inDt != null && outDt != null) {
+        s.durationMinutes = outDt.difference(inDt).inMinutes;
+      } else {
+        s.durationMinutes = null;
+      }
+    }
+  }
+
+  // -------------------- LOCATION --------------------
+  Future<void> _initLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() => _error = 'Location services are disabled.');
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() => _error = 'Location permission denied.');
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      _currentPos = pos;
+      _locationReady = true;
+
+      if (_planLoaded) _computeDistancesAndMarkers();
+    } catch (e) {
+      setState(() => _error = 'Failed to get location: $e');
+    }
+  }
+
+  // -------------------- MAP + MARKERS --------------------
+  void _computeDistancesAndMarkers() {
+    if (_currentPos == null) return;
+
+    final lat1 = _currentPos!.latitude;
+    final lon1 = _currentPos!.longitude;
+
+    _items = _all
+        .map((s) => _JourneyWithDistance(
+              supervisor: s,
+              distanceKm: distanceInKm(lat1, lon1, s.lat, s.lng),
+            ))
+        .toList()
+      ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+
+    _buildMarkers();
+
+    if (_mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(lat1, lon1), zoom: 12.5),
+        ),
+      );
+    }
+  }
+
+  void _buildMarkers() {
+    final markers = <Marker>{};
+
+    if (_currentPos != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('current_location'),
+          position: LatLng(_currentPos!.latitude, _currentPos!.longitude),
+          infoWindow: const InfoWindow(title: 'You are here'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+      );
+    }
+
+    for (final item in _items) {
+      final stop = item.supervisor;
+      markers.add(
+        Marker(
+          markerId: MarkerId(stop.locationId ?? stop.name), // ✅ better uniqueness
+          position: LatLng(stop.lat, stop.lng),
+          infoWindow: InfoWindow(
+            title: stop.name,
+            snippet: '${item.distanceKm.toStringAsFixed(1)} km away',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            stop.isVisited ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueRed,
+          ),
+        ),
+      );
+    }
+
+    setState(() {
+      _markers
+        ..clear()
+        ..addAll(markers);
+    });
+  }
+
+  // -------------------- VISIT FLOW --------------------
+  void _onToggleVisited(_JourneyWithDistance item) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // ✅ If already visited today -> block (from firebase derived state)
+    if (item.supervisor.isVisited) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Already visited ${item.supervisor.name} today.')),
+      );
+      return;
+    }
+
+    if (_currentPos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Current location not available yet.')),
+      );
+      return;
+    }
+
+    final dMeters = Geolocator.distanceBetween(
+      _currentPos!.latitude,
+      _currentPos!.longitude,
+      item.supervisor.lat,
+      item.supervisor.lng,
+    );
+
+    final configured = (item.supervisor.radiusMeters > 0)
+        ? item.supervisor.radiusMeters.toDouble()
+        : kVisitRadiusMeters;
+
+    final limitMeters = math.min(configured, kVisitRadiusMeters);
+
+    if (dMeters > limitMeters) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'You must be at ${item.supervisor.name} (within ${limitMeters.toStringAsFixed(0)} m).\n'
+            'Current distance: ${dMeters.toStringAsFixed(0)} m',
+          ),
+        ),
+      );
+      return;
+    }
+
+    _startVisitFlow(item.supervisor);
+  }
+
+  void _startVisitFlow(JourneyPlanSupervisor stop) {
+    final now = DateTime.now();
+    _box.write(_pendingVisitKey, stop.locationId ?? stop.name); // ✅ store key
+    _box.write(_pendingVisitCheckInKey, now.toIso8601String());
+    _showVisitPopup(stop);
+  }
+
+  Future<void> _restorePendingPopup() async {
+    final pendingKey = _box.read<String>(_pendingVisitKey);
+    if (pendingKey == null) return;
+
+    JourneyPlanSupervisor? stop;
+    for (final s in _all) {
+      final key = (s.locationId ?? s.name);
+      if (key == pendingKey) {
+        stop = s;
+        break;
+      }
+    }
+    if (stop == null) return;
+
+    // ✅ If already visited (firebase), clear pending and do nothing
+    if (stop.isVisited) {
+      _box.remove(_pendingVisitKey);
+      _box.remove(_pendingVisitCheckInKey);
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showVisitPopup(stop!);
+    });
+  }
+
+  // ✅ Visit popup same as your theme (unchanged)
+  Future<void> _showVisitPopup(JourneyPlanSupervisor stop) async {
+    final result = await showDialog<Map<String, dynamic>?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final commentCtrl = TextEditingController();
+        final stockQtyCtrl = TextEditingController();
+
+        String shelfCondition = 'Good';
+        int displayScore = 7;
+        bool submitting = false;
+
+        const dropdownBg = Color(0xFF6B7280);
+        const dropdownTextStyle = TextStyle(
+          color: Colors.white,
+          fontFamily: 'ClashGrotesk',
+          fontWeight: FontWeight.w600,
+        );
+
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: StatefulBuilder(
+            builder: (ctx, setStateDialog) {
+              final stockQty = int.tryParse(stockQtyCtrl.text.trim());
+
+              final canSubmit =
+                  (stockQty != null && stockQty >= 0) &&
+                  commentCtrl.text.trim().isNotEmpty &&
+                  !submitting;
+
+              Widget _label(String text) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      text,
+                      style: const TextStyle(
+                        fontFamily: 'ClashGrotesk',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: kText,
+                      ),
+                    ),
+                  );
+
+              Widget _greyDropdown<T>({
+                required T value,
+                required List<DropdownMenuItem<T>> items,
+                required ValueChanged<T?> onChanged,
+              }) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: dropdownBg,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<T>(
+                      value: value,
+                      isExpanded: true,
+                      dropdownColor: dropdownBg,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white,
+                      ),
+                      style: dropdownTextStyle,
+                      onChanged: onChanged,
+                      items: items,
+                    ),
+                  ),
+                );
+              }
+
+              return AlertDialog(
+                backgroundColor: Colors.white.withOpacity(0.59),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                titlePadding: const EdgeInsets.only(top: 16, left: 20, right: 20),
+                contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Visit details',
+                      style: TextStyle(
+                        fontFamily: 'ClashGrotesk',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        color: kText,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      stop.name,
+                      style: const TextStyle(
+                        fontFamily: 'ClashGrotesk',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: kText,
+                      ),
+                    ),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 10),
+                      _label('Shelf condition'),
+                      const SizedBox(height: 6),
+                      _greyDropdown<String>(
+                        value: shelfCondition,
+                        onChanged: (v) => setStateDialog(() {
+                          shelfCondition = v ?? 'Good';
+                        }),
+                        items: const [
+                          DropdownMenuItem(value: 'Good', child: Text('Good', style: dropdownTextStyle)),
+                          DropdownMenuItem(value: 'Normal', child: Text('Normal', style: dropdownTextStyle)),
+                          DropdownMenuItem(value: 'Bad', child: Text('Bad', style: dropdownTextStyle)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _label('Stock quantity (approx.)'),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: stockQtyCtrl,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setStateDialog(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. 12',
+                          hintStyle: const TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontSize: 12,
+                            color: kMuted,
+                          ),
+                          fillColor: const Color(0xFFF2F3F5),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontFamily: 'ClashGrotesk',
+                          fontSize: 13,
+                          color: kText,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _label('Display (1 to 10)'),
+                      const SizedBox(height: 6),
+                      _greyDropdown<int>(
+                        value: displayScore,
+                        onChanged: (v) => setStateDialog(() {
+                          displayScore = v ?? 7;
+                        }),
+                        items: List.generate(
+                          10,
+                          (i) => DropdownMenuItem(
+                            value: i + 1,
+                            child: Text('${i + 1}', style: dropdownTextStyle),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _label('Comments'),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: commentCtrl,
+                        maxLines: 4,
+                        minLines: 3,
+                        onChanged: (_) => setStateDialog(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Write 3–4 lines about stock & display...',
+                          hintStyle: const TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontSize: 12,
+                            color: kMuted,
+                          ),
+                          fillColor: const Color(0xFFF2F3F5),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontFamily: 'ClashGrotesk',
+                          fontSize: 13,
+                          color: kText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                actions: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00C6FF),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: canSubmit
+                          ? () {
+                              setStateDialog(() => submitting = true);
+                              Navigator.of(ctx).pop(<String, dynamic>{
+                                'comment': commentCtrl.text.trim(),
+                                'shelfCondition': shelfCondition,
+                                'stockQty': int.tryParse(stockQtyCtrl.text.trim()) ?? 0,
+                                'displayScore': displayScore,
+                              });
+                            }
+                          : null,
+                      child: submitting
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Submit',
+                              style: TextStyle(
+                                fontFamily: 'ClashGrotesk',
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    final checkInIso = _box.read<String>(_pendingVisitCheckInKey);
+    final checkIn = checkInIso != null ? DateTime.tryParse(checkInIso) : null;
+
+    final checkOut = DateTime.now();
+    final durationMinutes = checkIn != null ? checkOut.difference(checkIn).inMinutes : 0;
+
+    _box.remove(_pendingVisitKey);
+    _box.remove(_pendingVisitCheckInKey);
+
+    final form = <String, dynamic>{
+      'shelfCondition': (result['shelfCondition'] ?? '').toString(),
+      'stockQty': (result['stockQty'] is num) ? (result['stockQty'] as num).toInt() : 0,
+      'displayScore': (result['displayScore'] is num) ? (result['displayScore'] as num).toInt() : 0,
+    };
+
+    await _markVisitedPersistFirebase(
+      stop,
+      comment: (result['comment'] ?? '').toString(),
+      form: form,
+      checkIn: checkIn,
+      checkOut: checkOut,
+      durationMinutes: durationMinutes,
+    );
+  }
+
+  // -------------------- ✅ FIREBASE-SAFE VISIT WRITE (ONE PER DAY) --------------------
+  Future<void> _markVisitedPersistFirebase(
+    JourneyPlanSupervisor stop, {
+    required String comment,
+    required Map<String, dynamic> form,
+    DateTime? checkIn,
+    DateTime? checkOut,
+    int? durationMinutes,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final planId = _planId;
+    final locId = stop.locationId;
+
+    if (user == null || planId == null || locId == null || locId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing plan/location. Please retry.')),
+      );
+      return;
+    }
+
+    final dayKey = _todayDayKey;
+    final visitId = _visitDocId(dayKey: dayKey, supervisorId: user.uid, locationId: locId);
+
+    final docRef = FirebaseFirestore.instance
+        .collection('journeyPlans')
+        .doc(planId)
+        .collection('visits')
+        .doc(visitId);
+
+    try {
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(docRef);
+        if (snap.exists) {
+          // ✅ Already visited today -> block
+          throw StateError('already_visited_today');
+        }
+
+        tx.set(docRef, <String, dynamic>{
+          'visitId': visitId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'dayKey': dayKey,
+
+          'supervisorId': user.uid,
+
+          // stop identity
+          'locationId': locId,
+          'stopName': stop.name,
+          'lat': stop.lat,
+          'lng': stop.lng,
+          'radiusMeters': stop.radiusMeters,
+
+          // visit payload
+          'comment': comment,
+          'form': form,
+
+          // checkin/checkout saved as Timestamp
+          'checkIn': checkIn != null ? Timestamp.fromDate(checkIn) : null,
+          'checkOut': checkOut != null ? Timestamp.fromDate(checkOut) : null,
+          'durationMinutes': durationMinutes,
+        });
+      });
+
+      // ✅ Update UI immediately
+      setState(() {
+        stop.isVisited = true;
+        stop.checkIn = checkIn;
+        stop.checkOut = checkOut;
+        stop.durationMinutes = durationMinutes;
+      });
+
+      _buildMarkers();
+
+      if (_completedLocations == _totalLocations) {
+        _maybeShowJourneyEnded();
+      }
+    } catch (e) {
+      if (e is StateError && e.message == 'already_visited_today') {
+        // ✅ refresh from firebase to ensure correct state
+        await _syncVisitsFromFirebaseForToday(supervisorId: user.uid);
+        _computeDistancesAndMarkers();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Already visited ${stop.name} today.')),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit visit: $e')),
+      );
+    }
+  }
+
+  // -------------------- JOURNEY END DIALOG --------------------
+  void _maybeShowJourneyEnded() {
+    if (_totalLocations == 0) return;
+    if (_completedLocations != _totalLocations) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showJourneyEndedDialog();
+    });
+  }
+
+  Future<void> _showJourneyEndedDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(.92),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: kShadow, blurRadius: 18, offset: Offset(0, 10)),
+                    ],
+                    border: Border.all(color: Colors.white.withOpacity(0.60), width: 1.2),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            gradient: _kGrad,
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF7F53FD).withOpacity(0.20),
+                                blurRadius: 18,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.verified_rounded, color: Colors.white, size: 34),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Today's journey ended",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: kText,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'You have visited all outlets planned for today.\n\n'
+                          'Please come back tomorrow to start a new journey.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: kMuted,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: _PrimaryGradientButton(
+                            text: 'OK',
+                            onPressed: () => Navigator.of(ctx).pop(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // -------------------- LOGOUT / RETRY --------------------
+  Future<void> _logout() async {
+    await _box.erase();
+    await FirebaseAuth.instance.signOut();
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
+    );
+  }
+
+  void _retry() {
+    _mapController?.dispose();
+    _mapController = null;
+    _markers.clear();
+    _items.clear();
+    _boot();
+  }
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  // -------------------- UI --------------------
+  @override
+  Widget build(BuildContext context) {
+    final hasLocation = _currentPos != null;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(gradient: _kGrad),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: hasLocation
+                      ? GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(_currentPos!.latitude, _currentPos!.longitude),
+                            zoom: 12.0,
+                          ),
+                          myLocationEnabled: true,
+                          myLocationButtonEnabled: false,
+                          compassEnabled: true,
+                          markers: _markers,
+                          onMapCreated: (c) {
+                            _mapController = c;
+                            if (!_mapCreated) setState(() => _mapCreated = true);
+                            if (_currentPos != null && _planLoaded) {
+                              _computeDistancesAndMarkers();
+                            }
+                          },
+                        )
+                      : const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                ),
+
+                // Top fade
+                Container(
+                  height: 96,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.black.withOpacity(0.4), Colors.transparent],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+
+                // Logout
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 40),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 100,
+                        height: 30,
+                        child: _PrimaryGradientButton(
+                          text: 'Logout',
+                          onPressed: _logout,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Bottom list panel
+                if (_error == null)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: Container(
+                            width: double.infinity,
+                            constraints: const BoxConstraints(maxHeight: 260),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.59),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.59),
+                                width: 1.3,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                                  child: Row(
+                                    children: [
+                                      const Text(
+                                        'Nearby Outlets',
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15,
+                                          fontFamily: 'ClashGrotesk',
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            'Stops: ${_items.length}',
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w900,
+                                              fontFamily: 'ClashGrotesk',
+                                            ),
+                                          ),
+                                          Text(
+                                            'Done: $_completedLocations',
+                                            style: const TextStyle(
+                                              color: Colors.green,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w900,
+                                              fontFamily: 'ClashGrotesk',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Expanded(
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                                    itemCount: _items.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                    itemBuilder: (_, i) {
+                                      final item = _items[i];
+                                      return _GlassJourneyCard(
+                                        index: i + 1,
+                                        data: item,
+                                        onTap: () {
+                                          _mapController?.animateCamera(
+                                            CameraUpdate.newCameraPosition(
+                                              CameraPosition(
+                                                target: LatLng(item.supervisor.lat, item.supervisor.lng),
+                                                zoom: 15.5,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        onToggleVisited: () => _onToggleVisited(item),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // HARD SPLASH LOCK
+          if (!_ready)
+            Positioned.fill(
+              child: _SplashView(
+                text: _error == null ? 'Loading map & outlets...' : _error!,
+                isError: _error != null,
+                onRetry: _error != null ? _retry : null,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// -------------------- SPLASH --------------------
+class _SplashView extends StatelessWidget {
+  const _SplashView({
+    required this.text,
+    required this.isError,
+    this.onRetry,
+  });
+
+  final String text;
+  final bool isError;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(gradient: _kGrad),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 22),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(.92),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [
+              BoxShadow(color: kShadow, blurRadius: 18, offset: Offset(0, 10)),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isError ? Icons.error_outline_rounded : Icons.map_rounded,
+                size: 64,
+                color: isError ? Colors.redAccent : const Color(0xFF7F53FD),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                text,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'ClashGrotesk',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isError ? Colors.redAccent : kText,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (!isError)
+                const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              if (isError && onRetry != null) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7F53FD),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: onRetry,
+                    child: const Text(
+                      'Retry',
+                      style: TextStyle(
+                        fontFamily: 'ClashGrotesk',
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -------------------- BUTTON --------------------
+class _PrimaryGradientButton extends StatelessWidget {
+  const _PrimaryGradientButton({
+    Key? key,
+    required this.text,
+    required this.onPressed,
+    this.loading = false,
+  }) : super(key: key);
+
+  final String text;
+  final VoidCallback? onPressed;
+  final bool loading;
+
+  static const _grad = LinearGradient(
+    colors: [Color(0xFF0ED2F7), Color(0xFF7F53FD)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = loading || onPressed == null;
+
+    return Opacity(
+      opacity: disabled ? 0.6 : 1.0,
+      child: Container(
+        height: 54,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: _grad,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF7F53FD).withOpacity(0.25),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(28),
+            onTap: disabled ? null : onPressed,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Text(
+                      text,
+                      style: const TextStyle(
+                        fontFamily: 'ClashGrotesk',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -------------------- CARD --------------------
+class _GlassJourneyCard extends StatelessWidget {
+  const _GlassJourneyCard({
+    required this.index,
+    required this.data,
+    required this.onTap,
+    required this.onToggleVisited,
+  });
+
+  final int index;
+  final _JourneyWithDistance data;
+  final VoidCallback onTap;
+  final VoidCallback onToggleVisited;
+
+  @override
+  Widget build(BuildContext context) {
+    final stop = data.supervisor;
+    final distText = '${data.distanceKm.toStringAsFixed(1)} km';
+
+    String? timeText;
+    if (stop.checkIn != null && stop.checkOut != null) {
+      final inStr = formatTimeHM(stop.checkIn!);
+      final outStr = formatTimeHM(stop.checkOut!);
+      timeText = stop.durationMinutes != null
+          ? '$inStr – $outStr • ${stop.durationMinutes} min'
+          : '$inStr – $outStr';
+    } else if (stop.checkIn != null) {
+      timeText = 'Check-in: ${formatTimeHM(stop.checkIn!)}';
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.black.withOpacity(0.5), width: 0.9),
+        ),
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Colors.white, Color(0xFFECFEFF)]),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(
+                  '$index',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'ClashGrotesk',
+                    color: kText,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    stop.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'ClashGrotesk',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_rounded, size: 14, color: Colors.white70),
+                      const SizedBox(width: 4),
+                      Text(
+                        distText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'ClashGrotesk',
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (timeText != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      timeText,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'ClashGrotesk',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: onToggleVisited,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: stop.isVisited
+                      ? Colors.greenAccent.withOpacity(0.18)
+                      : Colors.orangeAccent.withOpacity(0.18),
+                  border: Border.all(
+                    color: stop.isVisited ? Colors.greenAccent : Colors.orangeAccent,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      stop.isVisited ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      size: 16,
+                      color: stop.isVisited ? Colors.greenAccent : Colors.orangeAccent,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      stop.isVisited ? 'Visited' : 'Pending',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'ClashGrotesk',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
