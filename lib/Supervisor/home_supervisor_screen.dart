@@ -2603,7 +2603,115 @@ Future<void> _showVisitPopup(JourneyPlanSupervisor stop) async {
       _showJourneyEndedDialog();
     });
   }
+  Future<void> _showJourneyEndedDialog() async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return WillPopScope(
+        onWillPop: () async => false,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(.92),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: kShadow,
+                      blurRadius: 18,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.60),
+                    width: 1.2,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // ✅ Icon bubble (matches theme)
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          gradient: _kGrad,
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF7F53FD).withOpacity(0.20),
+                              blurRadius: 18,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.verified_rounded,
+                          color: Colors.white,
+                          size: 34,
+                        ),
+                      ),
 
+                      const SizedBox(height: 12),
+
+                      const Text(
+                        "Today's journey ended",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'ClashGrotesk',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: kText,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      const Text(
+                        'You have visited all outlets planned for today.\n\n'
+                        'Please come back tomorrow to start a new journey.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'ClashGrotesk',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: kMuted,
+                          height: 1.35,
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ✅ Full-width gradient button (same family as your logout button)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: _PrimaryGradientButton(
+                          text: 'OK',
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/*
   Future<void> _showJourneyEndedDialog() async {
     await showDialog<void>(
       context: context,
@@ -2642,7 +2750,7 @@ Future<void> _showVisitPopup(JourneyPlanSupervisor stop) async {
         );
       },
     );
-  }
+  }*/
 
   Future<void> _logout() async {
     await _box.erase();
