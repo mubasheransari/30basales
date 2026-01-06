@@ -4010,6 +4010,8 @@ class _JourneyPlansManagementTabState extends State<JourneyPlansManagementTab> {
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // header
                 Row(
