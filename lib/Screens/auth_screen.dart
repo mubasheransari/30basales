@@ -349,7 +349,7 @@ Future<void> _submitLogin() async {
       backgroundColor: const Color(0xFFF2F3F5),
       body: Stack(
         children: [
-          const WatermarkTiledSmall(tileScale: 25.0),
+          const WatermarkTiledSmall(tileScale: 5.0),
 
           SafeArea(
             child: Center(
@@ -732,7 +732,7 @@ Future<void> _submitLogin() async {
           ),
 
           // Device ID pill - top right
-          Positioned(
+        /*  Positioned(
             top: 8,
             right: 8,
             child: SafeArea(
@@ -780,7 +780,7 @@ Future<void> _submitLogin() async {
                 ),
               ),
             ),
-          ),
+          ),*/
 
           // logo (unchanged)
           Positioned(

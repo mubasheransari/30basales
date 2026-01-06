@@ -111,7 +111,8 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
       ),
       body: Stack(
         children: [
-           WatermarkTiledSmall(tileScale: 25.0),
+                    WatermarkTiledSmall(tileScale: 6.0),
+// WatermarkTiledSmall(tileScale: 6.0),
           SafeArea(
             child: Center(
               child: Padding(
