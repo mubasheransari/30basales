@@ -87,9 +87,7 @@ class FbJourneyPlanRepo {
     await batch.commit();
   }
 
-  // ============================= Supervisor =============================
 
-  /// Fetch active plan where `now` is within start/end.
   static Future<FbJourneyPlan?> fetchActivePlanOnce({
     required String supervisorId,
     required DateTime now,
@@ -117,7 +115,7 @@ class FbJourneyPlanRepo {
 
   static Future<List<FbJourneyStop>> fetchStopsForDay({
     required String planId,
-    required String dayKey, // yyyy-mm-dd
+    required String dayKey, 
   }) async {
     final planRef = _plans.doc(planId);
 

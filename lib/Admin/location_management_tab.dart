@@ -7,7 +7,6 @@ class LocationManagementTab extends StatelessWidget {
 
   static const _bg = Color(0xFFF6F7FA);
 
-  // ---------- UI Helpers ----------
   Widget _cardShell({required Widget child, EdgeInsets? padding}) {
     return Container(
       padding: padding ?? const EdgeInsets.all(12),

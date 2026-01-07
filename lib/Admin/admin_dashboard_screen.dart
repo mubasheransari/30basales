@@ -660,7 +660,6 @@ class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
   }
 }
 
-// ============================ SALES TAB (BLINK) =============================
 
 class SalesTabBlink extends StatefulWidget {
   const SalesTabBlink({super.key});

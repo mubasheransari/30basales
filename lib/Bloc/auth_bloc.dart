@@ -4,7 +4,6 @@ import 'package:get_storage/get_storage.dart';
 import 'package:new_amst_flutter/Bloc/auth_event.dart';
 import 'package:new_amst_flutter/Bloc/auth_state.dart';
 import 'package:new_amst_flutter/Firebase/firebase_services.dart';
-import 'package:new_amst_flutter/Repository/repository.dart';
 import 'package:bloc/bloc.dart';
 
 
@@ -16,13 +15,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   AuthBloc() : super(const AuthState()) {
     on<LoginEvent>(_onLogin);
-
-    // 🔥 map load handlers
     on<MapLoadStarted>(_onMapLoadStarted);
     on<MapCreatedEvent>(_onMapCreated);
     on<MapLoadReset>(_onMapLoadReset);
 
-    // If Firebase already has a signed-in user, hydrate state.
     final u = FirebaseAuth.instance.currentUser;
     if (u != null) {
       emit(state.copyWith(
@@ -33,7 +29,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  /* --------------------------- LOGIN --------------------------- */
 
   Future<void> _onLogin(LoginEvent e, Emitter<AuthState> emit) async {
     emit(state.copyWith(loginStatus: LoginStatus.loading, error: null));
@@ -87,7 +82,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  /* --------------------------- MAP LOAD HANDLERS --------------------------- */
 
   void _onMapLoadStarted(
     MapLoadStarted event,
