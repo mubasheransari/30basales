@@ -8,8 +8,182 @@ import 'package:intl/intl.dart';
 import 'package:new_amst_flutter/Screens/auth_screen.dart';
 import 'journey_plans_tab.dart';
 
+Future<bool> showAdminLogoutDialog(BuildContext context) async {
+  final res = await showDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => const _AdminLogoutDialog(),
+  );
+  return res ?? false;
+}
 
+class _AdminLogoutDialog extends StatelessWidget {
+  const _AdminLogoutDialog();
 
+  static const _grad = LinearGradient(
+    colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 54,
+              width: 54,
+              decoration: BoxDecoration(
+                gradient: _grad,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Logout",
+              style: TextStyle(
+                fontFamily: 'ClashGrotesk',
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "Are you sure you want to logout from Admin panel?",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'ClashGrotesk',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _DialogOutlineBtn(
+                    text: "CANCEL",
+                    onTap: () => Navigator.pop(context, false),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _DialogGradientBtn(
+                    text: "LOGOUT",
+                    onTap: () => Navigator.pop(context, true),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogGradientBtn extends StatelessWidget {
+  const _DialogGradientBtn({required this.text, required this.onTap});
+  final String text;
+  final VoidCallback onTap;
+
+  static const _grad = LinearGradient(
+    colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        gradient: _grad,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 14,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'ClashGrotesk',
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogOutlineBtn extends StatelessWidget {
+  const _DialogOutlineBtn({required this.text, required this.onTap});
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF7F53FD).withOpacity(0.35),
+          width: 1.2,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'ClashGrotesk',
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF7F53FD),
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 int _createdAtMillis(Map<String, dynamic> data) {
   final v = data['createdAt'];
@@ -36,7 +210,10 @@ String _fmtTime(dynamic createdAt) {
 List<Map<String, dynamic>> _extractOrderItems(Map<String, dynamic> data) {
   final raw = data['items'] ?? data['lines'] ?? data['products'] ?? [];
   if (raw is List) {
-    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
   return const [];
 }
@@ -59,7 +236,8 @@ String _nameOf(Map<String, dynamic> item) {
 
 /// ✅ Extract SKU safely
 String _skuOf(Map<String, dynamic> item) {
-  final v = item['sku'] ??
+  final v =
+      item['sku'] ??
       item['skuNo'] ??
       item['number'] ??
       item['code'] ??
@@ -113,6 +291,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Future<void> _logout() async {
+      final ok = await showAdminLogoutDialog(context);
+      if (!ok) return;
+
+      try {
+        final box = GetStorage();
+
+        // ✅ clear all possible login flags you use
+        box.remove('admin_loggedIn');
+        box.remove('supervisor_loggedIn');
+        box.remove('loggedIn');
+        box.remove('block_auth_redirect');
+      } catch (_) {}
+
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
+        (r) => false,
+      );
+    }
+
     final s = MediaQuery.sizeOf(context).width / 390.0;
     final title = _titles[_index];
 
@@ -150,7 +354,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             child: Row(
               children: [
-            //   const Icon(Icons.admin_panel_settings, color: Colors.white),
+                //   const Icon(Icons.admin_panel_settings, color: Colors.white),
                 SizedBox(width: 10 * s),
                 Expanded(
                   child: Text(
@@ -228,11 +432,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 currentIndex: _index,
                 onTap: (i) async {
                   if (i == 5) {
-                    await _logout();
+                    await _logout(); // ✅ shows popup first
                     return;
                   }
                   setState(() => _index = i);
                 },
+
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 selectedItemColor: Colors.white,
@@ -317,9 +522,13 @@ class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
   Widget build(BuildContext context) {
     final s = MediaQuery.sizeOf(context).width / 390.0;
 
-    final usersStream = FirebaseFirestore.instance.collection('users').snapshots();
-    final attendanceStream =
-        FirebaseFirestore.instance.collectionGroup('attendance').limit(300).snapshots();
+    final usersStream = FirebaseFirestore.instance
+        .collection('users')
+        .snapshots();
+    final attendanceStream = FirebaseFirestore.instance
+        .collectionGroup('attendance')
+        .limit(300)
+        .snapshots();
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: usersStream,
@@ -336,10 +545,15 @@ class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
           stream: attendanceStream,
           builder: (context, snap) {
             if (snap.hasError) return _ErrorBox(message: snap.error.toString());
-            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            if (!snap.hasData)
+              return const Center(child: CircularProgressIndicator());
 
             final docs = [...snap.data!.docs];
-            docs.sort((a, b) => _createdAtMillis(b.data()).compareTo(_createdAtMillis(a.data())));
+            docs.sort(
+              (a, b) => _createdAtMillis(
+                b.data(),
+              ).compareTo(_createdAtMillis(a.data())),
+            );
 
             _detectNew(docs);
 
@@ -347,7 +561,10 @@ class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
               return const Center(
                 child: Text(
                   'No attendance records found.',
-                  style: TextStyle(fontFamily: 'ClashGrotesk', fontWeight: FontWeight.w800),
+                  style: TextStyle(
+                    fontFamily: 'ClashGrotesk',
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               );
             }
@@ -375,7 +592,12 @@ class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
                 return _BlinkCard(
                   blink: shouldBlink,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(12 * s, 10 * s, 12 * s, 10 * s),
+                    padding: EdgeInsets.fromLTRB(
+                      12 * s,
+                      10 * s,
+                      12 * s,
+                      10 * s,
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -475,8 +697,13 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
   Widget build(BuildContext context) {
     final s = MediaQuery.sizeOf(context).width / 390.0;
 
-    final usersStream = FirebaseFirestore.instance.collection('users').snapshots();
-    final salesStream = FirebaseFirestore.instance.collectionGroup('sales').limit(300).snapshots();
+    final usersStream = FirebaseFirestore.instance
+        .collection('users')
+        .snapshots();
+    final salesStream = FirebaseFirestore.instance
+        .collectionGroup('sales')
+        .limit(300)
+        .snapshots();
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: usersStream,
@@ -493,10 +720,15 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
           stream: salesStream,
           builder: (context, snap) {
             if (snap.hasError) return _ErrorBox(message: snap.error.toString());
-            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            if (!snap.hasData)
+              return const Center(child: CircularProgressIndicator());
 
             final docs = [...snap.data!.docs];
-            docs.sort((a, b) => _createdAtMillis(b.data()).compareTo(_createdAtMillis(a.data())));
+            docs.sort(
+              (a, b) => _createdAtMillis(
+                b.data(),
+              ).compareTo(_createdAtMillis(a.data())),
+            );
 
             _detectNew(docs);
 
@@ -504,7 +736,10 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
               return const Center(
                 child: Text(
                   'No sales records found.',
-                  style: TextStyle(fontFamily: 'ClashGrotesk', fontWeight: FontWeight.w800),
+                  style: TextStyle(
+                    fontFamily: 'ClashGrotesk',
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               );
             }
@@ -521,11 +756,15 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
                 final userName = uidToName[uid] ?? uid;
 
                 final timeStr = _fmtTime(data['createdAt']);
-                final total = (data['total'] ?? data['grandTotal'] ?? data['amount']);
+                final total =
+                    (data['total'] ?? data['grandTotal'] ?? data['amount']);
 
                 final items = _extractOrderItems(data);
                 final skuCount = items.length;
-                final totalQty = items.fold<int>(0, (sum, it) => sum + _qtyOf(it));
+                final totalQty = items.fold<int>(
+                  0,
+                  (sum, it) => sum + _qtyOf(it),
+                );
 
                 final shouldBlink = _blink.contains(d.id);
 
@@ -538,8 +777,18 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
                       highlightColor: Colors.transparent,
                     ),
                     child: ExpansionTile(
-                      tilePadding: EdgeInsets.fromLTRB(12 * s, 10 * s, 12 * s, 10 * s),
-                      childrenPadding: EdgeInsets.fromLTRB(12 * s, 0, 12 * s, 12 * s),
+                      tilePadding: EdgeInsets.fromLTRB(
+                        12 * s,
+                        10 * s,
+                        12 * s,
+                        10 * s,
+                      ),
+                      childrenPadding: EdgeInsets.fromLTRB(
+                        12 * s,
+                        0,
+                        12 * s,
+                        12 * s,
+                      ),
                       title: Row(
                         children: [
                           // left gradient spine
@@ -577,7 +826,8 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
                         child: Text(
                           'Time: $timeStr\n'
                           'SKUs: $skuCount  •  Qty: $totalQty\n',
-                         /// 'Total: ${total ?? '--'}',
+
+                          /// 'Total: ${total ?? '--'}',
                           style: TextStyle(
                             fontFamily: 'ClashGrotesk',
                             color: const Color(0xFF374151),
@@ -599,7 +849,7 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              )
+                              ),
                             ]
                           : items.map((item) {
                               final name = _nameOf(item);
@@ -615,7 +865,8 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
                                     borderRadius: BorderRadius.circular(14 * s),
                                   ),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Icon(
                                         Icons.shopping_bag_outlined,
@@ -654,7 +905,6 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
   }
 }
 
-// ================================ UI =================================
 
 class _BlinkCard extends StatelessWidget {
   final bool blink;
@@ -680,10 +930,7 @@ class _BlinkCard extends StatelessWidget {
           width: blink ? 1 : 0,
         ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: child,
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(14), child: child),
     );
   }
 }
@@ -709,4 +956,3 @@ class _ErrorBox extends StatelessWidget {
     );
   }
 }
-
