@@ -5,6 +5,7 @@ import 'package:get_storage/get_storage.dart';
 import 'package:new_amst_flutter/Admin/location_management_tab.dart';
 import 'package:new_amst_flutter/Admin/supervisor_management_tab.dart';
 import 'package:intl/intl.dart';
+import 'package:new_amst_flutter/Model/products_data.dart';
 import 'package:new_amst_flutter/Screens/auth_screen.dart';
 import 'journey_plans_tab.dart';
 
@@ -672,6 +673,390 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
   final Set<String> _known = {};
   final Set<String> _blink = {};
 
+  // ---- per_kg_ltr lookup caches ----
+  late final Map<String, double> _perKgById;
+  late final Map<String, double> _perKgByNameBrand;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildPerKgLookups();
+  }
+
+  void _buildPerKgLookups() {
+    final byId = <String, double>{};
+    final byNameBrand = <String, double>{};
+
+    for (final p in kTeaProducts) {
+      final id = (p['id'] ?? '').toString().trim();
+      final name = (p['name'] ?? p['item_name'] ?? '').toString().trim();
+      final brand = (p['brand'] ?? '').toString().trim();
+      final per = _toDouble(p['per_kg_ltr']);
+      if (per <= 0) continue;
+
+      if (id.isNotEmpty) byId[id] = per;
+      if (name.isNotEmpty || brand.isNotEmpty) {
+        byNameBrand['$name|$brand'] = per;
+      }
+    }
+
+    _perKgById = byId;
+    _perKgByNameBrand = byNameBrand;
+  }
+
+  void _detectNew(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final currentIds = docs.map((d) => d.id).toSet();
+
+    if (_known.isEmpty) {
+      _known.addAll(currentIds);
+      return;
+    }
+
+    final newOnes = currentIds.difference(_known);
+    if (newOnes.isNotEmpty) {
+      _blink.addAll(newOnes);
+      _known.addAll(newOnes);
+
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (!mounted) return;
+        setState(() => _blink.removeAll(newOnes));
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = MediaQuery.sizeOf(context).width / 390.0;
+
+    final usersStream = FirebaseFirestore.instance.collection('users').snapshots();
+    final salesStream = FirebaseFirestore.instance.collectionGroup('sales').limit(300).snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: usersStream,
+      builder: (context, usersSnap) {
+        final Map<String, String> uidToName = {};
+        if (usersSnap.hasData) {
+          for (final d in usersSnap.data!.docs) {
+            final name = (d.data()['name'] ?? '').toString();
+            if (name.isNotEmpty) uidToName[d.id] = name;
+          }
+        }
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: salesStream,
+          builder: (context, snap) {
+            if (snap.hasError) return _ErrorBox(message: snap.error.toString());
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+
+            final docs = [...snap.data!.docs];
+            docs.sort(
+              (a, b) => _createdAtMillis(b.data()).compareTo(_createdAtMillis(a.data())),
+            );
+
+            _detectNew(docs);
+
+            if (docs.isEmpty) {
+              return const Center(
+                child: Text(
+                  'No sales records found.',
+                  style: TextStyle(
+                    fontFamily: 'ClashGrotesk',
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            return ListView.separated(
+              padding: EdgeInsets.fromLTRB(16 * s, 14 * s, 16 * s, 18 * s),
+              itemCount: docs.length,
+              separatorBuilder: (_, __) => SizedBox(height: 10 * s),
+              itemBuilder: (context, i) {
+                final d = docs[i];
+                final data = d.data();
+
+                final uid = d.reference.parent.parent?.id ?? 'unknown';
+                final userName = uidToName[uid] ?? uid;
+
+                final timeStr = _fmtTime(data['createdAt']);
+                final total = (data['total'] ?? data['grandTotal'] ?? data['amount']);
+
+                final items = _extractOrderItems(data);
+                final skuCount = items.length;
+                final totalQty = items.fold<int>(0, (sum, it) => sum + _qtyOf(it));
+
+                // ✅ Compute weights
+                final double totalWeight = _calcOrderTotalWeight(items);
+
+                final shouldBlink = _blink.contains(d.id);
+
+                return _BlinkCard(
+                  blink: shouldBlink,
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.fromLTRB(12 * s, 10 * s, 12 * s, 10 * s),
+                      childrenPadding: EdgeInsets.fromLTRB(12 * s, 0, 12 * s, 12 * s),
+                      title: Row(
+                        children: [
+                          // left gradient spine
+                          Container(
+                            width: 9 * s,
+                            height: 44 * s,
+                            decoration: const BoxDecoration(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(12),
+                                bottomLeft: Radius.circular(12),
+                              ),
+                              gradient: LinearGradient(
+                                colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 10 * s),
+                          Expanded(
+                            child: Text(
+                              '$userName • Sale',
+                              style: TextStyle(
+                                fontFamily: 'ClashGrotesk',
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF0F172A),
+                                fontSize: 14.5 * s,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Padding(
+                        padding: EdgeInsets.only(left: (9 + 10) * s),
+                        child: Text(
+                          'Time: $timeStr\n'
+                          'SKUs: $skuCount  •  Qty: $totalQty  •  Weight: ${totalWeight.toStringAsFixed(2)} KG\n',
+                          // 'Total: ${total ?? '--'}',
+                          style: TextStyle(
+                            fontFamily: 'ClashGrotesk',
+                            color: const Color(0xFF374151),
+                            height: 1.25,
+                            fontSize: 12.5 * s,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      children: items.isEmpty
+                          ? [
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'No items found in this order.',
+                                  style: TextStyle(
+                                    fontFamily: 'ClashGrotesk',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ]
+                          : items.map((item) {
+                              final name = _nameOf(item);
+                              final sku = _skuOf(item);
+                              final qty = _qtyOf(item);
+
+                              // ✅ per item weight
+                              final w = _calcItemWeight(item);
+
+                              return Padding(
+                                padding: EdgeInsets.only(top: 10 * s),
+                                child: Container(
+                                  padding: EdgeInsets.all(12 * s),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(14 * s),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.shopping_bag_outlined,
+                                        size: 16,
+                                        color: Color(0xFF0AA2FF),
+                                      ),
+                                      SizedBox(width: 8 * s),
+                                      Expanded(
+                                        child: Text(
+                                          '${name.isNotEmpty ? name : '—'}'
+                                          '${sku.isNotEmpty ? " ($sku)" : ""}\n'
+                                          'Qty: $qty'
+                                          '${w > 0 ? "  •  Weight: ${w.toStringAsFixed(2)} KG" : ""}',
+                                          style: TextStyle(
+                                            fontFamily: 'ClashGrotesk',
+                                            fontSize: 13 * s,
+                                            height: 1.3,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF111827),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ------------------ Weight helpers ------------------
+
+  double _calcOrderTotalWeight(List<Map<String, dynamic>> items) {
+    double sum = 0.0;
+    for (final it in items) {
+      sum += _calcItemWeight(it);
+    }
+    return sum;
+  }
+
+  double _calcItemWeight(Map<String, dynamic> item) {
+    final qty = _qtyOf(item);
+    if (qty <= 0) return 0.0;
+
+    final id = (item['itemId'] ?? item['skuId'] ?? item['id'] ?? '').toString().trim();
+    final name = _nameOf(item).trim();
+    final brand = (item['brand'] ?? '').toString().trim();
+
+    final perKg = _resolvePerKg(itemId: id, name: name, brand: brand);
+    if (perKg <= 0) return 0.0;
+
+    return perKg * qty;
+  }
+
+  double _resolvePerKg({required String itemId, required String name, required String brand}) {
+    if (itemId.isNotEmpty && _perKgById.containsKey(itemId)) {
+      return _perKgById[itemId]!;
+    }
+    return _perKgByNameBrand['$name|$brand'] ?? 0.0;
+  }
+
+  // ------------------ Existing helpers you already have ------------------
+  // Keep your existing versions if they already exist in the file.
+  // I’m including safe fallbacks here so this file compiles.
+
+  int _createdAtMillis(Map<String, dynamic> data) {
+    final v = data['createdAt'];
+    if (v is Timestamp) return v.millisecondsSinceEpoch;
+    if (v is DateTime) return v.millisecondsSinceEpoch;
+    if (v is int) return v;
+    if (v is String) return DateTime.tryParse(v)?.millisecondsSinceEpoch ?? 0;
+    return 0;
+  }
+
+  String _fmtTime(dynamic createdAt) {
+    if (createdAt is Timestamp) {
+      final dt = createdAt.toDate();
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} '
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+    if (createdAt is String) {
+      final dt = DateTime.tryParse(createdAt);
+      if (dt != null) {
+        return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} '
+            '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      }
+    }
+    return '--';
+  }
+
+  List<Map<String, dynamic>> _extractOrderItems(Map<String, dynamic> data) {
+    final v = data['items'] ?? data['lines'] ?? data['orderItems'];
+    if (v is List) {
+      return v.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
+  String _nameOf(Map<String, dynamic> item) {
+    return (item['name'] ?? item['productName'] ?? item['item_name'] ?? '').toString();
+  }
+
+  String _skuOf(Map<String, dynamic> item) {
+    return (item['sku'] ?? item['skuCode'] ?? item['code'] ?? '').toString();
+  }
+
+  int _qtyOf(Map<String, dynamic> item) {
+    final v = item['qty'] ?? item['quantity'] ?? item['q'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim()) ?? 0;
+    return 0;
+  }
+
+  double _toDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.trim()) ?? 0.0;
+    return 0.0;
+  }
+}
+
+// ------------------ Your existing widgets ------------------
+// Keep your current implementations if already defined elsewhere.
+
+class _ErrorBox extends StatelessWidget {
+  final String message;
+  const _ErrorBox({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        message,
+        style: const TextStyle(
+          fontFamily: 'ClashGrotesk',
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _BlinkCard extends StatelessWidget {
+  final bool blink;
+  final Widget child;
+
+  const _BlinkCard({required this.blink, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    // If you already have blinking animation logic, keep it.
+    // This fallback just returns the child.
+    return child;
+  }
+}
+
+/*
+class SalesTabBlink extends StatefulWidget {
+  const SalesTabBlink({super.key});
+
+  @override
+  State<SalesTabBlink> createState() => _SalesTabBlinkState();
+}
+
+class _SalesTabBlinkState extends State<SalesTabBlink> {
+  final Set<String> _known = {};
+  final Set<String> _blink = {};
+
   void _detectNew(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final currentIds = docs.map((d) => d.id).toSet();
 
@@ -902,56 +1287,56 @@ class _SalesTabBlinkState extends State<SalesTabBlink> {
       },
     );
   }
-}
+}*/
 
 
-class _BlinkCard extends StatelessWidget {
-  final bool blink;
-  final Widget child;
-  const _BlinkCard({required this.blink, required this.child});
+// class _BlinkCard extends StatelessWidget {
+//   final bool blink;
+//   final Widget child;
+//   const _BlinkCard({required this.blink, required this.child});
 
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        color: blink ? const Color(0xFFE8F7FF) : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 10,
-            offset: Offset(0, 6),
-          ),
-        ],
-        border: Border.all(
-          color: blink ? const Color(0xFF0AA2FF) : Colors.transparent,
-          width: blink ? 1 : 0,
-        ),
-      ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(14), child: child),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return AnimatedContainer(
+//       duration: const Duration(milliseconds: 300),
+//       decoration: BoxDecoration(
+//         color: blink ? const Color(0xFFE8F7FF) : Colors.white,
+//         borderRadius: BorderRadius.circular(14),
+//         boxShadow: const [
+//           BoxShadow(
+//             color: Color(0x12000000),
+//             blurRadius: 10,
+//             offset: Offset(0, 6),
+//           ),
+//         ],
+//         border: Border.all(
+//           color: blink ? const Color(0xFF0AA2FF) : Colors.transparent,
+//           width: blink ? 1 : 0,
+//         ),
+//       ),
+//       child: ClipRRect(borderRadius: BorderRadius.circular(14), child: child),
+//     );
+//   }
+// }
 
-class _ErrorBox extends StatelessWidget {
-  final String message;
-  const _ErrorBox({required this.message});
+// class _ErrorBox extends StatelessWidget {
+//   final String message;
+//   const _ErrorBox({required this.message});
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          'Error:\n$message',
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontFamily: 'ClashGrotesk',
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Center(
+//       child: Padding(
+//         padding: const EdgeInsets.all(16),
+//         child: Text(
+//           'Error:\n$message',
+//           textAlign: TextAlign.center,
+//           style: const TextStyle(
+//             fontFamily: 'ClashGrotesk',
+//             fontWeight: FontWeight.w700,
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
