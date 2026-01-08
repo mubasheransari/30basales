@@ -1043,9 +1043,31 @@ class FbLocationRepo {
     _cacheAt = DateTime.now();
     return list;
   }
+  static Future<void> upsertLocation({
+  String? id,
+  required String martName,
+  required String cityName,
+  required String areaName, // ✅ NEW
+  required double lat,
+  required double lng,
+  required double radiusMeters,
+}) async {
+  final ref = (id == null || id.isEmpty) ? _col.doc() : _col.doc(id);
+
+  await ref.set({
+    'martName': martName.trim(),
+    'cityName': cityName.trim(),
+    'areaName': areaName.trim(), // ✅ NEW
+    'allowedLocation': GeoPoint(lat, lng),
+    'allowedRadiusMeters': radiusMeters,
+    'updatedAt': FieldValue.serverTimestamp(),
+    'createdAt': FieldValue.serverTimestamp(), // ok with merge
+  }, SetOptions(merge: true));
+}
+
 
   /// ✅ UPDATED: martName + cityName
-  static Future<void> upsertLocation({
+ /* static Future<void> upsertLocation({
     String? id,
     required String martName,
     required String cityName,
@@ -1072,7 +1094,7 @@ class FbLocationRepo {
       'updatedAt': FieldValue.serverTimestamp(),
       if (id == null || id.isEmpty) 'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-  }
+  }*/
 
   static Future<void> deleteLocation(String id) async {
     await _col.doc(id).delete();
