@@ -2,10 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:new_amst_flutter/Firebase/firebase_services.dart';
 
-
-
-
-
 class LocationManagementTab extends StatelessWidget {
   const LocationManagementTab({super.key});
 
@@ -45,7 +41,9 @@ class LocationManagementTab extends StatelessWidget {
         fontWeight: FontWeight.w800,
         color: _txtDim,
       ),
-      prefixIcon: icon == null ? null : Icon(icon, color: const Color(0xFF7F53FD)),
+      prefixIcon: icon == null
+          ? null
+          : Icon(icon, color: const Color(0xFF7F53FD)),
 
       filled: true,
       fillColor: const Color(0xFFF3F4F6),
@@ -55,7 +53,9 @@ class LocationManagementTab extends StatelessWidget {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     ).copyWith(
-      prefixIcon: icon == null ? null : Icon(icon, color: const Color(0xFF7F53FD)),
+      prefixIcon: icon == null
+          ? null
+          : Icon(icon, color: const Color(0xFF7F53FD)),
     );
   }
 
@@ -66,28 +66,31 @@ class LocationManagementTab extends StatelessWidget {
     Map<String, dynamic>? existing,
   }) async {
     // Backward compatible reads:
-    final existingMart =
-        (existing?['martName'] ?? existing?['name'] ?? '').toString();
+    final existingMart = (existing?['martName'] ?? existing?['name'] ?? '')
+        .toString();
     final existingCity = (existing?['cityName'] ?? '').toString();
 
     final nameController = TextEditingController(text: existingMart);
     final cityController = TextEditingController(text: existingCity);
 
     final radiusController = TextEditingController(
-      text: (existing?['allowedRadiusMeters'] ??
-              existing?['radiusMeters'] ??
-              1000)
-          .toString(),
+      text:
+          (existing?['allowedRadiusMeters'] ??
+                  existing?['radiusMeters'] ??
+                  1000)
+              .toString(),
     );
 
     GeoPoint? gp;
     final exLoc = existing?['allowedLocation'] ?? existing?['location'];
     if (exLoc is GeoPoint) gp = exLoc;
 
-    final latController =
-        TextEditingController(text: gp?.latitude.toString() ?? '');
-    final lngController =
-        TextEditingController(text: gp?.longitude.toString() ?? '');
+    final latController = TextEditingController(
+      text: gp?.latitude.toString() ?? '',
+    );
+    final lngController = TextEditingController(
+      text: gp?.longitude.toString() ?? '',
+    );
 
     await showDialog(
       context: context,
@@ -111,7 +114,8 @@ class LocationManagementTab extends StatelessWidget {
                   radius == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text('Fill all fields with valid values')),
+                    content: Text('Fill all fields with valid values'),
+                  ),
                 );
                 return;
               }
@@ -132,9 +136,9 @@ class LocationManagementTab extends StatelessWidget {
 
                 Navigator.of(dialogCtx).pop();
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Save failed: $e')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
               } finally {
                 if (ctx.mounted) setState(() => saving = false);
               }
@@ -142,8 +146,10 @@ class LocationManagementTab extends StatelessWidget {
 
             return Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 18,
+              ),
               child: _cardShell(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
                 child: Column(
@@ -153,7 +159,9 @@ class LocationManagementTab extends StatelessWidget {
                     // title pill
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         gradient: _kGrad,
                         borderRadius: BorderRadius.circular(999),
@@ -161,8 +169,11 @@ class LocationManagementTab extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.place_rounded,
-                              color: Colors.white, size: 18),
+                          const Icon(
+                            Icons.place_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             id == null ? 'Add Location' : 'Edit Location',
@@ -180,16 +191,20 @@ class LocationManagementTab extends StatelessWidget {
 
                     TextField(
                       controller: nameController,
-                      decoration: _fieldDeco('Mart Name',
-                          icon: Icons.storefront_rounded),
+                      decoration: _fieldDeco(
+                        'Mart Name',
+                        icon: Icons.storefront_rounded,
+                      ),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
                     const SizedBox(height: 10),
 
                     TextField(
                       controller: cityController,
-                      decoration: _fieldDeco('City Name',
-                          icon: Icons.location_city_rounded),
+                      decoration: _fieldDeco(
+                        'City Name',
+                        icon: Icons.location_city_rounded,
+                      ),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
                     const SizedBox(height: 10),
@@ -199,26 +214,28 @@ class LocationManagementTab extends StatelessWidget {
                         Expanded(
                           child: TextField(
                             controller: latController,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
-                            decoration: _fieldDeco('Latitude',
-                                icon: Icons.my_location_rounded),
-                            style:
-                                const TextStyle(fontFamily: 'ClashGrotesk'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: _fieldDeco(
+                              'Latitude',
+                              icon: Icons.my_location_rounded,
+                            ),
+                            style: const TextStyle(fontFamily: 'ClashGrotesk'),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: TextField(
                             controller: lngController,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
-                            decoration: _fieldDeco('Longitude',
-                                icon: Icons.explore_rounded),
-                            style:
-                                const TextStyle(fontFamily: 'ClashGrotesk'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: _fieldDeco(
+                              'Longitude',
+                              icon: Icons.explore_rounded,
+                            ),
+                            style: const TextStyle(fontFamily: 'ClashGrotesk'),
                           ),
                         ),
                       ],
@@ -227,10 +244,13 @@ class LocationManagementTab extends StatelessWidget {
 
                     TextField(
                       controller: radiusController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: _fieldDeco('Radius (meters)',
-                          icon: Icons.radar_rounded),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: _fieldDeco(
+                        'Radius (meters)',
+                        icon: Icons.radar_rounded,
+                      ),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
 
@@ -357,14 +377,15 @@ class LocationManagementTab extends StatelessWidget {
                       IconButton(
                         tooltip: 'Edit',
                         onPressed: onEdit,
-                        icon:
-                            const Icon(Icons.edit, color: Color(0xFF111827)),
+                        icon: const Icon(Icons.edit, color: Color(0xFF111827)),
                       ),
                       IconButton(
                         tooltip: 'Delete',
                         onPressed: onDelete,
-                        icon: const Icon(Icons.delete_outline,
-                            color: Color(0xFFEF4444)),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Color(0xFFEF4444),
+                        ),
                       ),
                     ],
                   ),
@@ -407,7 +428,11 @@ class LocationManagementTab extends StatelessWidget {
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
-                    16 * s, 10 * s, 16 * s, 24 * s + padBottom),
+                  16 * s,
+                  10 * s,
+                  16 * s,
+                  24 * s + padBottom,
+                ),
                 children: [
                   SizedBox(height: 12 * s),
                   if (docs.isEmpty)
@@ -431,10 +456,12 @@ class LocationManagementTab extends StatelessWidget {
                           (data['martName'] ?? data['name'] ?? d.id).toString();
                       final cityName = (data['cityName'] ?? '').toString();
 
-                      final rawLoc = data['allowedLocation'] ?? data['location'];
+                      final rawLoc =
+                          data['allowedLocation'] ?? data['location'];
                       final gp = rawLoc is GeoPoint ? rawLoc : null;
 
-                      final radRaw = data['allowedRadiusMeters'] ??
+                      final radRaw =
+                          data['allowedRadiusMeters'] ??
                           data['radiusMeters'] ??
                           0;
                       final rad = (radRaw is num)
@@ -444,8 +471,8 @@ class LocationManagementTab extends StatelessWidget {
                       final subtitle = gp == null
                           ? 'City: ${cityName.isEmpty ? '--' : cityName}\nRadius: ${rad.toStringAsFixed(0)} m'
                           : 'City: ${cityName.isEmpty ? '--' : cityName}\n'
-                              'Lat: ${_fmtNum(gp.latitude)}  •  Lng: ${_fmtNum(gp.longitude)}\n'
-                              'Radius: ${rad.toStringAsFixed(0)} m';
+                                'Lat: ${_fmtNum(gp.latitude)}  •  Lng: ${_fmtNum(gp.longitude)}\n'
+                                'Radius: ${rad.toStringAsFixed(0)} m';
 
                       return Padding(
                         padding: EdgeInsets.only(bottom: 12 * s),
@@ -461,45 +488,197 @@ class LocationManagementTab extends StatelessWidget {
                           onDelete: () async {
                             final ok = await showDialog<bool>(
                               context: context,
-                              builder: (_) => AlertDialog(
-                                title: const Text(
-                                  'Delete location?',
-                                  style: TextStyle(
-                                    fontFamily: 'ClashGrotesk',
-                                    fontWeight: FontWeight.w900,
+                              barrierDismissible: true,
+                              builder: (_) {
+                                const _kGrad = LinearGradient(
+                                  colors: [
+                                    Color(0xFF00C6FF),
+                                    Color(0xFF7F53FD),
+                                  ],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                );
+
+                                return Dialog(
+                                  backgroundColor: Colors.transparent,
+                                  insetPadding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 18,
                                   ),
-                                ),
-                                content: Text(
-                                  'Delete "$martName"?',
-                                  style: const TextStyle(
-                                      fontFamily: 'ClashGrotesk'),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, false),
-                                    child: const Text(
-                                      'Cancel',
-                                      style: TextStyle(
-                                          fontFamily: 'ClashGrotesk'),
+                                  child: Container(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      14,
+                                      14,
+                                      14,
+                                      12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x14000000),
+                                          blurRadius: 12,
+                                          offset: Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // ✅ Gradient title pill (theme)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            gradient: _kGrad,
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.delete_outline,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Delete Location',
+                                                style: TextStyle(
+                                                  fontFamily: 'ClashGrotesk',
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 14),
+
+                                        const Text(
+                                          'Are you sure?',
+                                          style: TextStyle(
+                                            fontFamily: 'ClashGrotesk',
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+
+                                        Text(
+                                          'This will permanently delete "$martName".',
+                                          style: const TextStyle(
+                                            fontFamily: 'ClashGrotesk',
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF6B7280),
+                                            height: 1.25,
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 16),
+
+                                        Row(
+                                          children: [
+                                            // ✅ Cancel (outlined)
+                                            Expanded(
+                                              child: OutlinedButton(
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  false,
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          14,
+                                                        ),
+                                                  ),
+                                                  side: const BorderSide(
+                                                    color: Color(0xFFE5E7EB),
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 14,
+                                                      ),
+                                                ),
+                                                child: const Text(
+                                                  'Cancel',
+                                                  style: TextStyle(
+                                                    fontFamily: 'ClashGrotesk',
+                                                    fontWeight: FontWeight.w900,
+                                                    color: Color(0xFF111827),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+
+                                            // ✅ Delete (gradient theme button)
+                                            Expanded(
+                                              child: Container(
+                                                height: 48,
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                  gradient: _kGrad,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: const Color(
+                                                        0xFF7F53FD,
+                                                      ).withOpacity(0.22),
+                                                      blurRadius: 14,
+                                                      offset: const Offset(
+                                                        0,
+                                                        6,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Material(
+                                                  color: Colors.transparent,
+                                                  child: InkWell(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          14,
+                                                        ),
+                                                    onTap: () => Navigator.pop(
+                                                      context,
+                                                      true,
+                                                    ),
+                                                    child: const Center(
+                                                      child: Text(
+                                                        'Delete',
+                                                        style: TextStyle(
+                                                          fontFamily:
+                                                              'ClashGrotesk',
+                                                          fontWeight:
+                                                              FontWeight.w900,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  ElevatedButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    style: ElevatedButton.styleFrom(
-                                      elevation: 0,
-                                      backgroundColor:
-                                          const Color(0xFFEF4444),
-                                    ),
-                                    child: const Text(
-                                      'Delete',
-                                      style: TextStyle(
-                                          fontFamily: 'ClashGrotesk'),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                );
+                              },
                             );
 
                             if (ok == true) {
@@ -517,14 +696,12 @@ class LocationManagementTab extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF0F172A),
-        onPressed: () => _openEditDialog(context), // id null => add new
+        onPressed: () => _openEditDialog(context),
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 }
-
-// ----------- Gradient button (same theme style) -----------
 
 class _PrimaryGradButton extends StatelessWidget {
   const _PrimaryGradButton({
@@ -573,8 +750,7 @@ class _PrimaryGradButton extends StatelessWidget {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : Text(
@@ -592,7 +768,6 @@ class _PrimaryGradButton extends StatelessWidget {
     );
   }
 }
-
 
 // class LocationManagementTab extends StatelessWidget {
 //   const LocationManagementTab({super.key});
