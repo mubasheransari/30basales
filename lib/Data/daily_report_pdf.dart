@@ -177,13 +177,13 @@ class DailyReportPdfService {
                           ),
                         ),
                       ),
-                      pw.SizedBox(height: 4),
-                      pw.Center(
-                        child: pw.Text(
-                          prettyDate,
-                          style: const pw.TextStyle(color: PdfColors.white, fontSize: 11),
-                        ),
-                      ),
+                      // pw.SizedBox(height: 4),
+                      // pw.Center(
+                      //   child: pw.Text(
+                      //     prettyDate,
+                      //     style: const pw.TextStyle(color: PdfColors.white, fontSize: 11),
+                      //   ),
+                      //),
                     ],
                   ),
                 ),
