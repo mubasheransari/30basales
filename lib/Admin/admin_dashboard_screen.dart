@@ -403,8 +403,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
 
       body: body,
-
-      // ✅ Modern pill-like bottom nav holder
       bottomNavigationBar: Container(
         padding: EdgeInsets.fromLTRB(12 * s, 0, 12 * s, 10 * s),
         color: Colors.transparent,

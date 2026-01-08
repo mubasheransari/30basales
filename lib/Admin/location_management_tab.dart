@@ -775,6 +775,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:new_amst_flutter/Firebase/firebase_services.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:new_amst_flutter/Firebase/firebase_services.dart';
+
 class LocationManagementTab extends StatelessWidget {
   const LocationManagementTab({super.key});
 
@@ -833,15 +837,14 @@ class LocationManagementTab extends StatelessWidget {
     String? id,
     Map<String, dynamic>? existing,
   }) async {
-    // Backward compatible reads:
     final existingMart =
         (existing?['martName'] ?? existing?['name'] ?? '').toString();
     final existingCity = (existing?['cityName'] ?? '').toString();
-    final existingArea = (existing?['areaName'] ?? '').toString(); // ✅ NEW
+    final existingArea = (existing?['areaName'] ?? '').toString();
 
     final nameController = TextEditingController(text: existingMart);
     final cityController = TextEditingController(text: existingCity);
-    final areaController = TextEditingController(text: existingArea); // ✅ NEW
+    final areaController = TextEditingController(text: existingArea);
 
     final radiusController = TextEditingController(
       text: (existing?['allowedRadiusMeters'] ??
@@ -854,12 +857,8 @@ class LocationManagementTab extends StatelessWidget {
     final exLoc = existing?['allowedLocation'] ?? existing?['location'];
     if (exLoc is GeoPoint) gp = exLoc;
 
-    final latController = TextEditingController(
-      text: gp?.latitude.toString() ?? '',
-    );
-    final lngController = TextEditingController(
-      text: gp?.longitude.toString() ?? '',
-    );
+    final latController = TextEditingController(text: gp?.latitude.toString() ?? '');
+    final lngController = TextEditingController(text: gp?.longitude.toString() ?? '');
 
     await showDialog(
       context: context,
@@ -871,7 +870,7 @@ class LocationManagementTab extends StatelessWidget {
             Future<void> save() async {
               final martName = nameController.text.trim();
               final cityName = cityController.text.trim();
-              final areaName = areaController.text.trim(); // ✅ NEW
+              final areaName = areaController.text.trim();
 
               final lat = double.tryParse(latController.text.trim());
               final lng = double.tryParse(lngController.text.trim());
@@ -879,14 +878,12 @@ class LocationManagementTab extends StatelessWidget {
 
               if (martName.isEmpty ||
                   cityName.isEmpty ||
-                  areaName.isEmpty || // ✅ NEW validation
+                  areaName.isEmpty ||
                   lat == null ||
                   lng == null ||
                   radius == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Fill all fields with valid values'),
-                  ),
+                  const SnackBar(content: Text('Fill all fields with valid values')),
                 );
                 return;
               }
@@ -894,13 +891,11 @@ class LocationManagementTab extends StatelessWidget {
               setState(() => saving = true);
 
               try {
-                // ✅ IMPORTANT FIX:
-                // When editing, pass the SAME id to update the same doc
                 await FbLocationRepo.upsertLocation(
-                  id: id, // ✅ keep same doc id when editing
+                  id: id,
                   martName: martName,
                   cityName: cityName,
-                  areaName: areaName, // ✅ NEW
+                  areaName: areaName,
                   lat: lat,
                   lng: lng,
                   radiusMeters: radius,
@@ -918,22 +913,15 @@ class LocationManagementTab extends StatelessWidget {
 
             return Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 18,
-              ),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
               child: _cardShell(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // title pill
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         gradient: _kGrad,
                         borderRadius: BorderRadius.circular(999),
@@ -941,11 +929,7 @@ class LocationManagementTab extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            Icons.place_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
+                          const Icon(Icons.place_rounded, color: Colors.white, size: 18),
                           const SizedBox(width: 8),
                           Text(
                             id == null ? 'Add Location' : 'Edit Location',
@@ -963,31 +947,21 @@ class LocationManagementTab extends StatelessWidget {
 
                     TextField(
                       controller: nameController,
-                      decoration: _fieldDeco(
-                        'Mart Name',
-                        icon: Icons.storefront_rounded,
-                      ),
+                      decoration: _fieldDeco('Mart Name', icon: Icons.storefront_rounded),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
                     const SizedBox(height: 10),
 
                     TextField(
                       controller: cityController,
-                      decoration: _fieldDeco(
-                        'City Name',
-                        icon: Icons.location_city_rounded,
-                      ),
+                      decoration: _fieldDeco('City Name', icon: Icons.location_city_rounded),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
                     const SizedBox(height: 10),
 
-                    // ✅ NEW: Area Name
                     TextField(
                       controller: areaController,
-                      decoration: _fieldDeco(
-                        'Area Name',
-                        icon: Icons.map_rounded,
-                      ),
+                      decoration: _fieldDeco('Area Name', icon: Icons.map_rounded),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
                     const SizedBox(height: 10),
@@ -997,13 +971,8 @@ class LocationManagementTab extends StatelessWidget {
                         Expanded(
                           child: TextField(
                             controller: latController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: _fieldDeco(
-                              'Latitude',
-                              icon: Icons.my_location_rounded,
-                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _fieldDeco('Latitude', icon: Icons.my_location_rounded),
                             style: const TextStyle(fontFamily: 'ClashGrotesk'),
                           ),
                         ),
@@ -1011,13 +980,8 @@ class LocationManagementTab extends StatelessWidget {
                         Expanded(
                           child: TextField(
                             controller: lngController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: _fieldDeco(
-                              'Longitude',
-                              icon: Icons.explore_rounded,
-                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _fieldDeco('Longitude', icon: Icons.explore_rounded),
                             style: const TextStyle(fontFamily: 'ClashGrotesk'),
                           ),
                         ),
@@ -1027,13 +991,8 @@ class LocationManagementTab extends StatelessWidget {
 
                     TextField(
                       controller: radiusController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: _fieldDeco(
-                        'Radius (meters)',
-                        icon: Icons.radar_rounded,
-                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: _fieldDeco('Radius (meters)', icon: Icons.radar_rounded),
                       style: const TextStyle(fontFamily: 'ClashGrotesk'),
                     ),
 
@@ -1043,8 +1002,7 @@ class LocationManagementTab extends StatelessWidget {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed:
-                                saving ? null : () => Navigator.of(dialogCtx).pop(),
+                            onPressed: saving ? null : () => Navigator.of(dialogCtx).pop(),
                             style: OutlinedButton.styleFrom(
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
@@ -1082,7 +1040,6 @@ class LocationManagementTab extends StatelessWidget {
     );
   }
 
-  // ---------- Card item ----------
   Widget _locationCard({
     required double s,
     required String title,
@@ -1105,10 +1062,9 @@ class LocationManagementTab extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // left gradient spine
           Container(
             width: 9 * s,
-            height: 118 * s, // slightly taller due to extra line
+            height: 118 * s,
             decoration: const BoxDecoration(
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(12),
@@ -1121,14 +1077,12 @@ class LocationManagementTab extends StatelessWidget {
               ),
             ),
           ),
-
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(12 * s, 10 * s, 10 * s, 10 * s),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // text
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1156,8 +1110,6 @@ class LocationManagementTab extends StatelessWidget {
                       ],
                     ),
                   ),
-
-                  // actions
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1169,10 +1121,7 @@ class LocationManagementTab extends StatelessWidget {
                       IconButton(
                         tooltip: 'Delete',
                         onPressed: onDelete,
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Color(0xFFEF4444),
-                        ),
+                        icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
                       ),
                     ],
                   ),
@@ -1190,7 +1139,6 @@ class LocationManagementTab extends StatelessWidget {
     return s.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
-  // ---------- Main ----------
   @override
   Widget build(BuildContext context) {
     final s = MediaQuery.sizeOf(context).width / 390.0;
@@ -1202,24 +1150,25 @@ class LocationManagementTab extends StatelessWidget {
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FbLocationRepo.streamLocations(),
           builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
+            if (snap.hasError) {
+              return Center(
+                child: Text(
+                  'Error: ${snap.error}',
+                  style: const TextStyle(fontFamily: 'ClashGrotesk'),
+                ),
+              );
+            }
+            if (!snap.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final docs = snap.data?.docs ?? [];
+            final docs = snap.data!.docs;
 
             return RefreshIndicator(
-              onRefresh: () async {
-                await Future<void>.delayed(const Duration(milliseconds: 250));
-              },
+              onRefresh: () async => Future<void>.delayed(const Duration(milliseconds: 250)),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  16 * s,
-                  10 * s,
-                  16 * s,
-                  24 * s + padBottom,
-                ),
+                padding: EdgeInsets.fromLTRB(16 * s, 10 * s, 16 * s, 24 * s + padBottom),
                 children: [
                   SizedBox(height: 12 * s),
                   if (docs.isEmpty)
@@ -1239,29 +1188,26 @@ class LocationManagementTab extends StatelessWidget {
                     ...docs.map((d) {
                       final data = d.data();
 
-                      final martName =
-                          (data['martName'] ?? data['name'] ?? d.id).toString();
+                      final martName = (data['martName'] ?? data['name'] ?? d.id).toString();
                       final cityName = (data['cityName'] ?? '').toString();
-                      final areaName = (data['areaName'] ?? '').toString(); // ✅ NEW
+                      final areaName = (data['areaName'] ?? '').toString();
 
                       final rawLoc = data['allowedLocation'] ?? data['location'];
                       final gp = rawLoc is GeoPoint ? rawLoc : null;
 
-                      final radRaw = data['allowedRadiusMeters'] ??
-                          data['radiusMeters'] ??
-                          0;
+                      final radRaw = data['allowedRadiusMeters'] ?? data['radiusMeters'] ?? 0;
                       final rad = (radRaw is num)
                           ? radRaw.toDouble()
                           : double.tryParse(radRaw.toString()) ?? 0.0;
 
                       final subtitle = gp == null
                           ? 'City: ${cityName.isEmpty ? '--' : cityName}\n'
-                            'Area: ${areaName.isEmpty ? '--' : areaName}\n'
-                            'Radius: ${rad.toStringAsFixed(0)} m'
+                              'Area: ${areaName.isEmpty ? '--' : areaName}\n'
+                              'Radius: ${rad.toStringAsFixed(0)} m'
                           : 'City: ${cityName.isEmpty ? '--' : cityName}\n'
-                            'Area: ${areaName.isEmpty ? '--' : areaName}\n'
-                            'Lat: ${_fmtNum(gp.latitude)}  •  Lng: ${_fmtNum(gp.longitude)}\n'
-                            'Radius: ${rad.toStringAsFixed(0)} m';
+                              'Area: ${areaName.isEmpty ? '--' : areaName}\n'
+                              'Lat: ${_fmtNum(gp.latitude)}  •  Lng: ${_fmtNum(gp.longitude)}\n'
+                              'Radius: ${rad.toStringAsFixed(0)} m';
 
                       return Padding(
                         padding: EdgeInsets.only(bottom: 12 * s),
@@ -1269,13 +1215,8 @@ class LocationManagementTab extends StatelessWidget {
                           s: s,
                           title: martName,
                           subtitle: subtitle,
-                          onEdit: () => _openEditDialog(
-                            context,
-                            id: d.id, // ✅ keep same doc id
-                            existing: data,
-                          ),
+                          onEdit: () => _openEditDialog(context, id: d.id, existing: data),
                           onDelete: () async {
-                            // use your themed delete dialog (already shared)
                             final ok = await showDialog<bool>(
                               context: context,
                               builder: (_) => AlertDialog(
@@ -1315,8 +1256,6 @@ class LocationManagementTab extends StatelessWidget {
     );
   }
 }
-
-// ----------- Gradient button (same theme style) -----------
 
 class _PrimaryGradButton extends StatelessWidget {
   const _PrimaryGradButton({
