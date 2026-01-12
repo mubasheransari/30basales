@@ -487,7 +487,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 }
 
-// ============================ ATTENDANCE TAB (BLINK) =============================
 
 class AttendanceTabBlink extends StatefulWidget {
   const AttendanceTabBlink({super.key});
@@ -497,6 +496,18 @@ class AttendanceTabBlink extends StatefulWidget {
 }
 
 class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
+  // ========================== Theme (same as your other tabs) ==========================
+  static const _bg = Color(0xFFF6F7FA);
+  static const _txtDark = Color(0xFF0F172A);
+  static const _txtDim = Color(0xFF64748B);
+
+  static const _grad = LinearGradient(
+    colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  // ========================== Blink logic (kept) ==========================
   final Set<String> _known = {};
   final Set<String> _blink = {};
 
@@ -520,147 +531,547 @@ class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
     }
   }
 
+  // ========================== UI helpers ==========================
+  Widget _cardShell({required Widget child, EdgeInsets? padding}) {
+    return Container(
+      padding: padding ?? const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _gradIconBox(double s, IconData icon) {
+    return Container(
+      height: 40 * s,
+      width: 40 * s,
+      decoration: BoxDecoration(
+        gradient: _grad,
+        borderRadius: BorderRadius.circular(14 * s),
+        boxShadow: const [
+          BoxShadow(color: Color(0x22000000), blurRadius: 14, offset: Offset(0, 8)),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: 18 * s),
+    );
+  }
+
+  Widget _chip(double s, IconData icon, String text,
+      {Color? bg, Color? fg, Color? border}) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10 * s, vertical: 7 * s),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: bg ?? const Color(0xFFF8FAFC),
+        border: Border.all(color: border ?? const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14 * s, color: fg ?? _txtDim),
+          SizedBox(width: 6 * s),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'ClashGrotesk',
+              fontSize: 11.2 * s,
+              fontWeight: FontWeight.w800,
+              color: fg ?? _txtDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fmtNum(double v) {
+    final s = v.toStringAsFixed(6);
+    return s.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  // ========================== Build ==========================
   @override
   Widget build(BuildContext context) {
     final s = MediaQuery.sizeOf(context).width / 390.0;
+    final padBottom = MediaQuery.paddingOf(context).bottom;
 
-    final usersStream = FirebaseFirestore.instance
-        .collection('users')
-        .snapshots();
+    final usersStream = FirebaseFirestore.instance.collection('users').snapshots();
     final attendanceStream = FirebaseFirestore.instance
         .collectionGroup('attendance')
         .limit(300)
         .snapshots();
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: usersStream,
-      builder: (context, usersSnap) {
-        final Map<String, String> uidToName = {};
-        if (usersSnap.hasData) {
-          for (final d in usersSnap.data!.docs) {
-            final name = (d.data()['name'] ?? '').toString();
-            if (name.isNotEmpty) uidToName[d.id] = name;
-          }
-        }
-
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: attendanceStream,
-          builder: (context, snap) {
-            if (snap.hasError) return _ErrorBox(message: snap.error.toString());
-            if (!snap.hasData)
-              return const Center(child: CircularProgressIndicator());
-
-            final docs = [...snap.data!.docs];
-            docs.sort(
-              (a, b) => _createdAtMillis(
-                b.data(),
-              ).compareTo(_createdAtMillis(a.data())),
-            );
-
-            _detectNew(docs);
-
-            if (docs.isEmpty) {
-              return const Center(
-                child: Text(
-                  'No attendance records found.',
-                  style: TextStyle(
-                    fontFamily: 'ClashGrotesk',
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              );
+    return Scaffold(
+      backgroundColor: _bg,
+      body: SafeArea(
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: usersStream,
+          builder: (context, usersSnap) {
+            // uid -> name map
+            final Map<String, String> uidToName = {};
+            if (usersSnap.hasData) {
+              for (final d in usersSnap.data!.docs) {
+                final name = (d.data()['name'] ?? '').toString().trim();
+                if (name.isNotEmpty) uidToName[d.id] = name;
+              }
             }
 
-            return ListView.separated(
-              padding: EdgeInsets.fromLTRB(16 * s, 14 * s, 16 * s, 18 * s),
-              itemCount: docs.length,
-              separatorBuilder: (_, __) => SizedBox(height: 10 * s),
-              itemBuilder: (context, i) {
-                final d = docs[i];
-                final data = d.data();
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: attendanceStream,
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return _ErrorBox(message: snap.error.toString());
+                }
+                if (!snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                final uid = d.reference.parent.parent?.id ?? 'unknown';
-                final userName = uidToName[uid] ?? uid;
-
-                final action = (data['action'] ?? '').toString();
-                final dist = (data['distanceMeters'] as num?)?.toDouble();
-                final within = (data['withinAllowed'] as bool?) ?? false;
-                final lat = (data['lat'] as num?)?.toDouble();
-                final lng = (data['lng'] as num?)?.toDouble();
-
-                final timeStr = _fmtTime(data['createdAt']);
-                final shouldBlink = _blink.contains(d.id);
-
-                return _BlinkCard(
-                  blink: shouldBlink,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      12 * s,
-                      10 * s,
-                      12 * s,
-                      10 * s,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // left gradient spine
-                        Container(
-                          width: 9 * s,
-                          height: 92 * s,
-                          decoration: const BoxDecoration(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(12),
-                              bottomLeft: Radius.circular(12),
-                            ),
-                            gradient: LinearGradient(
-                              colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 10 * s),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$userName • $action',
-                                style: TextStyle(
-                                  fontFamily: 'ClashGrotesk',
-                                  fontWeight: FontWeight.w900,
-                                  color: const Color(0xFF0F172A),
-                                  fontSize: 14.5 * s,
-                                ),
-                              ),
-                              SizedBox(height: 6 * s),
-                              Text(
-                                'Time: $timeStr\n'
-                                'Distance: ${dist?.toStringAsFixed(1) ?? '--'} m (${within ? 'Allowed' : 'Blocked'})\n'
-                                'Lat/Lng: ${lat?.toStringAsFixed(6) ?? '--'}, ${lng?.toStringAsFixed(6) ?? '--'}',
-                                style: TextStyle(
-                                  fontFamily: 'ClashGrotesk',
-                                  color: const Color(0xFF374151),
-                                  height: 1.25,
-                                  fontSize: 12.5 * s,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                final docs = [...snap.data!.docs];
+                docs.sort(
+                  (a, b) => _createdAtMillis(b.data()).compareTo(
+                    _createdAtMillis(a.data()),
                   ),
+                );
+
+                _detectNew(docs);
+
+                // ✅ Top summary + list
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    16 * s,
+                    12 * s,
+                    16 * s,
+                    24 * s + padBottom,
+                  ),
+                  children: [
+                    _cardShell(
+                      padding: EdgeInsets.all(14 * s),
+                      child: Row(
+                        children: [
+                          _gradIconBox(s, Icons.how_to_reg_rounded),
+                          SizedBox(width: 10 * s),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Attendance',
+                                  style: TextStyle(
+                                    fontFamily: 'ClashGrotesk',
+                                    fontSize: 16 * s,
+                                    fontWeight: FontWeight.w900,
+                                    color: _txtDark,
+                                  ),
+                                ),
+                                SizedBox(height: 4 * s),
+                                Text(
+                                  'Latest check-ins / check-outs with distance & geo.',
+                                  style: TextStyle(
+                                    fontFamily: 'ClashGrotesk',
+                                    fontSize: 12.2 * s,
+                                    fontWeight: FontWeight.w700,
+                                    color: _txtDim,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 10 * s,
+                              vertical: 7 * s,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: const Color(0xFFF1F5F9),
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                            ),
+                            child: Text(
+                              '${docs.length} total',
+                              style: TextStyle(
+                                fontFamily: 'ClashGrotesk',
+                                fontSize: 11.4 * s,
+                                fontWeight: FontWeight.w900,
+                                color: _txtDark,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 14 * s),
+
+                    if (docs.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 120 * s),
+                          child: Text(
+                            'No attendance records found.',
+                            style: TextStyle(
+                              fontFamily: 'ClashGrotesk',
+                              fontSize: 13.5 * s,
+                              fontWeight: FontWeight.w800,
+                              color: _txtDim,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      ...List.generate(docs.length, (i) {
+                        final d = docs[i];
+                        final data = d.data();
+
+                        final uid = d.reference.parent.parent?.id ?? 'unknown';
+                        final userName = uidToName[uid] ?? uid;
+
+                        final action = (data['action'] ?? '').toString().trim();
+                        final dist = (data['distanceMeters'] as num?)?.toDouble();
+                        final within = (data['withinAllowed'] as bool?) ?? false;
+                        final lat = (data['lat'] as num?)?.toDouble();
+                        final lng = (data['lng'] as num?)?.toDouble();
+
+                        final timeStr = _fmtTime(data['createdAt']);
+                        final shouldBlink = _blink.contains(d.id);
+
+                        final actionSafe = action.isEmpty ? 'action' : action;
+
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: 12 * s),
+                          child: _BlinkCard(
+                            blink: shouldBlink,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18 * s),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x14000000),
+                                    blurRadius: 18,
+                                    offset: Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(14 * s),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        _gradIconBox(
+                                          s,
+                                          within
+                                              ? Icons.verified_rounded
+                                              : Icons.block_rounded,
+                                        ),
+                                        SizedBox(width: 10 * s),
+                                        Expanded(
+                                          child: Text(
+                                            '$userName • $actionSafe',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontFamily: 'ClashGrotesk',
+                                              fontSize: 15.2 * s,
+                                              fontWeight: FontWeight.w900,
+                                              color: _txtDark,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        _chip(
+                                          s,
+                                          Icons.access_time_rounded,
+                                          timeStr,
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 12 * s),
+
+                                    Wrap(
+                                      spacing: 8 * s,
+                                      runSpacing: 8 * s,
+                                      children: [
+                                        _chip(
+                                          s,
+                                          Icons.social_distance_rounded,
+                                          '${dist?.toStringAsFixed(1) ?? '--'} m',
+                                        ),
+                                        _chip(
+                                          s,
+                                          within
+                                              ? Icons.check_circle_rounded
+                                              : Icons.cancel_rounded,
+                                          within ? 'Allowed' : 'Blocked',
+                                          bg: within
+                                              ? const Color(0xFFECFDF3)
+                                              : const Color(0xFFFFF1F2),
+                                          fg: within
+                                              ? const Color(0xFF027A48)
+                                              : const Color(0xFFB42318),
+                                          border: within
+                                              ? const Color(0xFFABEFC6)
+                                              : const Color(0xFFFECACA),
+                                        ),
+                                        if (lat != null && lng != null)
+                                          _chip(
+                                            s,
+                                            Icons.my_location_rounded,
+                                            '${_fmtNum(lat)} , ${_fmtNum(lng)}',
+                                          ),
+                                      ],
+                                    ),
+
+                                    SizedBox(height: 10 * s),
+
+                                    Container(
+                                      width: double.infinity,
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 12 * s,
+                                        vertical: 10 * s,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(16 * s),
+                                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            height: 32 * s,
+                                            width: 32 * s,
+                                            decoration: BoxDecoration(
+                                              gradient: _grad,
+                                              borderRadius: BorderRadius.circular(12 * s),
+                                            ),
+                                            child: Icon(
+                                              Icons.info_outline_rounded,
+                                              color: Colors.white,
+                                              size: 16 * s,
+                                            ),
+                                          ),
+                                          SizedBox(width: 10 * s),
+                                          Expanded(
+                                            child: Text(
+                                              'Time: $timeStr\n'
+                                              'Distance: ${dist?.toStringAsFixed(1) ?? '--'} m (${within ? 'Allowed' : 'Blocked'})\n'
+                                              'Lat/Lng: ${lat?.toStringAsFixed(6) ?? '--'}, ${lng?.toStringAsFixed(6) ?? '--'}',
+                                              style: TextStyle(
+                                                fontFamily: 'ClashGrotesk',
+                                                color: const Color(0xFF334155),
+                                                height: 1.25,
+                                                fontSize: 12.3 * s,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
                 );
               },
             );
           },
-        );
-      },
+        ),
+      ),
     );
   }
 }
+
+// ============================ ATTENDANCE TAB (BLINK) =============================
+
+// class AttendanceTabBlink extends StatefulWidget {
+//   const AttendanceTabBlink({super.key});
+
+//   @override
+//   State<AttendanceTabBlink> createState() => _AttendanceTabBlinkState();
+// }
+
+// class _AttendanceTabBlinkState extends State<AttendanceTabBlink> {
+//   final Set<String> _known = {};
+//   final Set<String> _blink = {};
+
+//   void _detectNew(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+//     final currentIds = docs.map((d) => d.id).toSet();
+
+//     if (_known.isEmpty) {
+//       _known.addAll(currentIds);
+//       return;
+//     }
+
+//     final newOnes = currentIds.difference(_known);
+//     if (newOnes.isNotEmpty) {
+//       _blink.addAll(newOnes);
+//       _known.addAll(newOnes);
+
+//       Future.delayed(const Duration(milliseconds: 800), () {
+//         if (!mounted) return;
+//         setState(() => _blink.removeAll(newOnes));
+//       });
+//     }
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final s = MediaQuery.sizeOf(context).width / 390.0;
+
+//     final usersStream = FirebaseFirestore.instance
+//         .collection('users')
+//         .snapshots();
+//     final attendanceStream = FirebaseFirestore.instance
+//         .collectionGroup('attendance')
+//         .limit(300)
+//         .snapshots();
+
+//     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+//       stream: usersStream,
+//       builder: (context, usersSnap) {
+//         final Map<String, String> uidToName = {};
+//         if (usersSnap.hasData) {
+//           for (final d in usersSnap.data!.docs) {
+//             final name = (d.data()['name'] ?? '').toString();
+//             if (name.isNotEmpty) uidToName[d.id] = name;
+//           }
+//         }
+
+//         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+//           stream: attendanceStream,
+//           builder: (context, snap) {
+//             if (snap.hasError) return _ErrorBox(message: snap.error.toString());
+//             if (!snap.hasData)
+//               return const Center(child: CircularProgressIndicator());
+
+//             final docs = [...snap.data!.docs];
+//             docs.sort(
+//               (a, b) => _createdAtMillis(
+//                 b.data(),
+//               ).compareTo(_createdAtMillis(a.data())),
+//             );
+
+//             _detectNew(docs);
+
+//             if (docs.isEmpty) {
+//               return const Center(
+//                 child: Text(
+//                   'No attendance records found.',
+//                   style: TextStyle(
+//                     fontFamily: 'ClashGrotesk',
+//                     fontWeight: FontWeight.w800,
+//                   ),
+//                 ),
+//               );
+//             }
+
+//             return ListView.separated(
+//               padding: EdgeInsets.fromLTRB(16 * s, 14 * s, 16 * s, 18 * s),
+//               itemCount: docs.length,
+//               separatorBuilder: (_, __) => SizedBox(height: 10 * s),
+//               itemBuilder: (context, i) {
+//                 final d = docs[i];
+//                 final data = d.data();
+
+//                 final uid = d.reference.parent.parent?.id ?? 'unknown';
+//                 final userName = uidToName[uid] ?? uid;
+
+//                 final action = (data['action'] ?? '').toString();
+//                 final dist = (data['distanceMeters'] as num?)?.toDouble();
+//                 final within = (data['withinAllowed'] as bool?) ?? false;
+//                 final lat = (data['lat'] as num?)?.toDouble();
+//                 final lng = (data['lng'] as num?)?.toDouble();
+
+//                 final timeStr = _fmtTime(data['createdAt']);
+//                 final shouldBlink = _blink.contains(d.id);
+
+//                 return _BlinkCard(
+//                   blink: shouldBlink,
+//                   child: Padding(
+//                     padding: EdgeInsets.fromLTRB(
+//                       12 * s,
+//                       10 * s,
+//                       12 * s,
+//                       10 * s,
+//                     ),
+//                     child: Row(
+//                       crossAxisAlignment: CrossAxisAlignment.start,
+//                       children: [
+//                         // left gradient spine
+//                         Container(
+//                           width: 9 * s,
+//                           height: 92 * s,
+//                           decoration: const BoxDecoration(
+//                             borderRadius: BorderRadius.only(
+//                               topLeft: Radius.circular(12),
+//                               bottomLeft: Radius.circular(12),
+//                             ),
+//                             gradient: LinearGradient(
+//                               colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+//                               begin: Alignment.topCenter,
+//                               end: Alignment.bottomCenter,
+//                             ),
+//                           ),
+//                         ),
+//                         SizedBox(width: 10 * s),
+//                         Expanded(
+//                           child: Column(
+//                             crossAxisAlignment: CrossAxisAlignment.start,
+//                             children: [
+//                               Text(
+//                                 '$userName • $action',
+//                                 style: TextStyle(
+//                                   fontFamily: 'ClashGrotesk',
+//                                   fontWeight: FontWeight.w900,
+//                                   color: const Color(0xFF0F172A),
+//                                   fontSize: 14.5 * s,
+//                                 ),
+//                               ),
+//                               SizedBox(height: 6 * s),
+//                               Text(
+//                                 'Time: $timeStr\n'
+//                                 'Distance: ${dist?.toStringAsFixed(1) ?? '--'} m (${within ? 'Allowed' : 'Blocked'})\n'
+//                                 'Lat/Lng: ${lat?.toStringAsFixed(6) ?? '--'}, ${lng?.toStringAsFixed(6) ?? '--'}',
+//                                 style: TextStyle(
+//                                   fontFamily: 'ClashGrotesk',
+//                                   color: const Color(0xFF374151),
+//                                   height: 1.25,
+//                                   fontSize: 12.5 * s,
+//                                   fontWeight: FontWeight.w600,
+//                                 ),
+//                               ),
+//                             ],
+//                           ),
+//                         ),
+//                       ],
+//                     ),
+//                   ),
+//                 );
+//               },
+//             );
+//           },
+//         );
+//       },
+//     );
+//   }
+// }
 
 
 class SalesTabBlink extends StatefulWidget {

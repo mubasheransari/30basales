@@ -569,14 +569,14 @@ class LocationManagementTab extends StatelessWidget {
                   if (docs.isEmpty)
                     Center(
                       child: Padding(
-                        padding: EdgeInsets.only(top: 120 * s),
+                        padding: EdgeInsets.only(top: 155 * s),
                         child: Text(
                           'No locations yet. Tap + to add.',
                           style: TextStyle(
                             fontFamily: 'ClashGrotesk',
-                            fontSize: 13.5 * s,
+                            fontSize: 14.5 * s,
                             fontWeight: FontWeight.w800,
-                            color: _txtDim,
+                            color: Colors.black,
                           ),
                         ),
                       ),
@@ -663,26 +663,153 @@ class LocationManagementTab extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(14 * s),
                                       onTap: () async {
                                         final ok = await showDialog<bool>(
-                                          context: context,
-                                          builder: (_) => AlertDialog(
-                                            title: const Text('Delete location?'),
-                                            content: Text('Delete "$martName"?'),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(context, false),
-                                                child: const Text('Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () => Navigator.pop(context, true),
-                                                child: const Text('Delete'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
+  context: context,
+  builder: (dialogCtx) => Dialog(
+    backgroundColor: Colors.transparent,
+    insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ✅ Gradient pill header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: _kGrad, // ✅ your gradient
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Confirm Delete',
+                  style: TextStyle(
+                    fontFamily: 'ClashGrotesk',
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
 
-                                        if (ok == true) {
-                                          await FbLocationRepo.deleteLocation(d.id);
-                                        }
+          const Text(
+            'Delete location?',
+            style: TextStyle(
+              fontFamily: 'ClashGrotesk',
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          Text(
+            'Delete "$martName"?\nThis action cannot be undone.',
+            style: const TextStyle(
+              fontFamily: 'ClashGrotesk',
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF4B5563),
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(dialogCtx, false),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontFamily: 'ClashGrotesk',
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogCtx, true),
+                  style: ElevatedButton.styleFrom(
+                    elevation: 0,
+                    backgroundColor: const Color(0xFFEF4444),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text(
+                    'Delete',
+                    style: TextStyle(
+                      fontFamily: 'ClashGrotesk',
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  ),
+);
+
+if (ok == true) {
+  await FbLocationRepo.deleteLocation(d.id);
+}
+
+                                        // final ok = await showDialog<bool>(
+                                        //   context: context,
+                                        //   builder: (_) => AlertDialog(
+                                        //     title: const Text('Delete location?'),
+                                        //     content: Text('Delete "$martName"?'),
+                                        //     actions: [
+                                        //       TextButton(
+                                        //         onPressed: () => Navigator.pop(context, false),
+                                        //         child: const Text('Cancel'),
+                                        //       ),
+                                        //       ElevatedButton(
+                                        //         onPressed: () => Navigator.pop(context, true),
+                                        //         child: const Text('Delete'),
+                                        //       ),
+                                        //     ],
+                                        //   ),
+                                        // );
+
+                                        // if (ok == true) {
+                                        //   await FbLocationRepo.deleteLocation(d.id);
+                                        // }
                                       },
                                       child: Container(
                                         padding: EdgeInsets.all(10 * s),
