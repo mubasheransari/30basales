@@ -526,7 +526,7 @@ class SupervisorManagementTab extends StatelessWidget {
       // ✅ Floating button styled like your gradient UI
       floatingActionButton: InkWell(
         onTap: () => _openAddDialog(context),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         child: Ink(
           width: 56,
           height: 56,

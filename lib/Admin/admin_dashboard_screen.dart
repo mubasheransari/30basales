@@ -411,7 +411,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Container(
             decoration: BoxDecoration(
               gradient: _grad,
-              borderRadius: BorderRadius.circular(18 * s),
+              borderRadius: BorderRadius.circular(9 * s),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x22000000),
@@ -444,15 +444,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 selectedLabelStyle: const TextStyle(
                   fontFamily: 'ClashGrotesk',
                   fontWeight: FontWeight.w900,
+                  fontSize: 10
                 ),
                 unselectedLabelStyle: const TextStyle(
                   fontFamily: 'ClashGrotesk',
                   fontWeight: FontWeight.w800,
+                     fontSize: 10
+                //  
                 ),
                 items: const [
                   BottomNavigationBarItem(
                     icon: Icon(Icons.location_on_outlined),
-                    label: 'Locations',
+                    label: ' Locations',
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.supervisor_account_outlined),
@@ -468,7 +471,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.map_outlined),
-                    label: 'Journey Plan',
+                    label: 'Journey',
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.logout),

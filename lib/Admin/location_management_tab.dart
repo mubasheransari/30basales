@@ -1,6 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:new_amst_flutter/Firebase/firebase_services.dart';
+
+   const _grad = LinearGradient(
+    colors: [Color(0xFF00C6FF), Color(0xFF7F53FD)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
 /*
 class LocationManagementTab extends StatelessWidget {
   const LocationManagementTab({super.key});
@@ -771,14 +777,6 @@ class _PrimaryGradButton extends StatelessWidget {
 
 
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:new_amst_flutter/Firebase/firebase_services.dart';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:new_amst_flutter/Firebase/firebase_services.dart';
-
 class LocationManagementTab extends StatelessWidget {
   const LocationManagementTab({super.key});
 
@@ -1249,9 +1247,24 @@ class LocationManagementTab extends StatelessWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF0F172A),
+    //    backgroundColor: const Color(0xFF0F172A),
         onPressed: () => _openEditDialog(context),
-        child: const Icon(Icons.add, color: Colors.white),
+        child: Ink(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: _grad,
+           borderRadius: BorderRadius.circular(10),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 14,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child:const Icon(Icons.add, color: Colors.white),
+        ),//const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
