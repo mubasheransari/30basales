@@ -149,7 +149,15 @@ class _SplashLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ShaderMask(
+    return Image.asset(
+        'assets/basales.png',
+        width: 390,
+        height: 290,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      );
+    
+   /* ShaderMask(
       shaderCallback: (bounds) {
         return const LinearGradient(
           begin: Alignment.centerLeft,
@@ -164,7 +172,7 @@ class _SplashLogo extends StatelessWidget {
         fit: BoxFit.contain,
         filterQuality: FilterQuality.high,
       ),
-    );
+    );*/
   }
 }
 
