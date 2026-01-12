@@ -1173,7 +1173,7 @@ class LocationManagementTab extends StatelessWidget {
                   SizedBox(height: 12 * s),
                   if (docs.isEmpty)
                     Padding(
-                      padding: EdgeInsets.only(top: 70 * s),
+                      padding: EdgeInsets.only(top: MediaQuery.of(context).size.height * 0.30),
                       child: const Center(
                         child: Text(
                           'No locations yet. Tap + to add.',
