@@ -1802,21 +1802,11 @@ Future<String?> _openPakistanCityPicker(BuildContext context, {String? initial})
   // ✅ Pinned on top
   const pinned = ['Karachi', 'Lahore', 'Islamabad'];
 
-  // ✅ Replace this with FULL Pakistan cities list
-  // const allCitiesRaw = <String>[
-  //   'Karachi', 'Lahore', 'Islamabad',
-  //   'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta',
-  //   'Hyderabad', 'Gujranwala', 'Sialkot', 'Bahawalpur', 'Sargodha',
-  //   'Sukkur', 'Larkana', 'Mardan', 'Abbottabad', 'Okara',
-  //   // ... add ALL cities here ...
-  // ];
-  // ✅ Pakistan Cities (Top pinned first: Karachi, Lahore, Islamabad)
 const allCitiesRaw = <String>[
   'Karachi',
   'Lahore',
   'Islamabad',
 
-  // --- remaining cities (dataset order) ---
   'Ahmed Nager',
   'Ahmadpur East',
   'Ali Khan',
